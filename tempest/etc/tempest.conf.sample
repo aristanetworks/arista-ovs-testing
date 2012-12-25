@@ -77,6 +77,9 @@ run_ssh = false
 # Name of a user used to authenticated to an instance
 ssh_user = {$SSH_USER}
 
+# Password used to authenticated to an instance
+ssh_pswd = {$SSH_PSWD}
+
 # Network id used for SSH (public, private, etc)
 network_for_ssh = {$SSH_NETWORK}
 
@@ -169,9 +172,13 @@ tenant_name = admin
 # against the OpenStack Network API.
 
 # Version of the Quantum API
-api_version = v1.1
+api_version = v2.0
 # Catalog type of the Quantum Service
 catalog_type = network
+
+net1_id = {$NETWORK_ID}
+net2_id = {$NETWORK_ID}
+net3_id = {$NETWORK_ID}
 
 [identity-admin]
 # This section contains configuration options for an administrative

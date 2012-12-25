@@ -1,6 +1,4 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
-# Copyright 2012 OpenStack, LLC
+#Copyright 2012 OpenStack, LLC
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -27,18 +25,18 @@ class BaseNetworkTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        os = openstack.Manager()
-        client = os.network_client
-        config = os.config
-        networks = []
-        enabled = True
+        cls.os = openstack.Manager()
+        cls.client = cls.os.network_client
+        cls.config = cls.os.config
+        cls.networks = []
+        cls.enabled = True
 
         # Validate that there is even an endpoint configured
         # for networks, and mark the attr for skipping if not
         try:
-            client.list_networks()
+            cls.client.list_networks()
         except exceptions.EndpointNotFound:
-            enabled = False
+            cls.enabled = False
             skip_msg = "No OpenStack Network API endpoint"
             raise nose.SkipTest(skip_msg)
 
@@ -55,3 +53,4 @@ class BaseNetworkTest(unittest.TestCase):
         network = body['network']
         self.networks.append(network)
         return network
+

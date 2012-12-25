@@ -150,8 +150,7 @@ class RestClient(object):
             if service == 'network':
                 # Keystone does not return the correct endpoint for
                 # quantum. Handle this separately.
-                mgmt_url = (mgmt_url + self.config.network.api_version +
-                            "/tenants/" + tenant_id)
+                mgmt_url = (mgmt_url + self.config.network.api_version)
 
             return token, mgmt_url
 

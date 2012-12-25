@@ -222,6 +222,11 @@ class ComputeConfig(BaseConfig):
         return self.get("ssh_user", "root")
 
     @property
+    def ssh_pswd(self):
+        """Password used to authenticate to an instance."""
+        return self.get("ssh_pswd", "pswd")
+
+    @property
     def ssh_timeout(self):
         """Timeout in seconds to wait for authentcation to succeed."""
         return float(self.get("ssh_timeout", 300))
@@ -353,6 +358,21 @@ class NetworkConfig(BaseConfig):
     def api_version(self):
         """Version of Quantum API"""
         return self.get("api_version", "v1.1")
+
+    @property
+    def net1_id(self):
+        """Version of Quantum API"""
+        return self.get("net1_id", "1")
+    
+    @property
+    def net2_id(self):
+        """Version of Quantum API"""
+        return self.get("net2_id", "2")
+    
+    @property
+    def net3_id(self):
+        """Version of Quantum API"""
+        return self.get("net3_id", "3")
 
 
 class VolumeConfig(BaseConfig):
