@@ -359,20 +359,41 @@ class NetworkConfig(BaseConfig):
         """Version of Quantum API"""
         return self.get("api_version", "v1.1")
 
+        
     @property
-    def net1_id(self):
-        """Version of Quantum API"""
-        return self.get("net1_id", "1")
+    def tenant1_net1_id(self):
+        """Network 1 in tenant 1 id"""
+        return self.get("tenant1_net1_id", "1")
+
+    @property
+    def tenant1_net2_id(self):
+        """Network 2 in tenant 1 id"""
+        return self.get("tenant1_net2_id", "2")
+
+    @property
+    def tenant2_net1_id(self):
+        """Network 1 in tenant 2 id"""
+        return self.get("tenant2_net1_id", "3")   
+ 
+    @property
+    def vEOS_ip(self):
+        """vEOS ip to ssh"""
+        return self.get("vEOS_ip", "1.1.1.1")
+    
+    @property        
+    def vEOS_login(self):
+        """vEOS username to ssh"""
+        return self.get("vEOS_login", "root")
     
     @property
-    def net2_id(self):
-        """Version of Quantum API"""
-        return self.get("net2_id", "2")
+    def vEOS_pswd(self):
+        """vEOS password to ssh"""
+        return self.get("vEOS_pswd", "test")
     
     @property
-    def net3_id(self):
-        """Version of Quantum API"""
-        return self.get("net3_id", "3")
+    def vEOS_if(self):
+        """Interface of controller for vEOS"""
+        return self.get("vEOS_if", "br100")    
 
 
 class VolumeConfig(BaseConfig):
