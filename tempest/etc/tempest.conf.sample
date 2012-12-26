@@ -176,9 +176,14 @@ api_version = v2.0
 # Catalog type of the Quantum Service
 catalog_type = network
 
-net1_id = {$NETWORK_ID}
-net2_id = {$NETWORK_ID}
-net3_id = {$NETWORK_ID}
+net1_id = {$NETWORK1_ID}
+net2_id = {$NETWORK2_ID}
+net3_id = {$NETWORK3_ID}
+
+vEOS_ip = {$vEOS_IP}
+vEOS_login = {$vEOS_LOGIN}
+vEOS_pswd = {$vEOS_PASSWORD}
+vEOS_if = {$vEOS_INTERFACE}
 
 [identity-admin]
 # This section contains configuration options for an administrative
