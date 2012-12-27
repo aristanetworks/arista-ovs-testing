@@ -1,4 +1,3 @@
-
 from nose.plugins.attrib import attr
 from tempest import openstack
 from tempest.common.utils.data_utils import rand_name
@@ -11,11 +10,10 @@ from paramiko import AutoAddPolicy
 from subprocess import Popen
 
 
-class L2Test(base.BaseNetworkTest):
+class L2Test(object):
 
     @classmethod
-    def setUpClass(cls):
-        super(L2Test, cls).setUpClass()
+    def setUpClass(cls):        
         cls.os = openstack.Manager()
         #set up Network client
         cls.network_client = cls.os.network_client
@@ -30,7 +28,7 @@ class L2Test(base.BaseNetworkTest):
         cls.admin_client = cls.os.admin_client
 
         #set up Server Client
-        cls.servers_client = cls.servers_client
+        cls.servers_client = cls.os.servers_client
         cls.image_ref = cls.config.compute.image_ref
         cls.flavor_ref = cls.config.compute.flavor_ref
         cls.vm_login = cls.config.compute.ssh_user
@@ -122,9 +120,10 @@ class L2Test(base.BaseNetworkTest):
         networks_attached_names = server['addresses'].keys()
         net_ids = []
         resp, networks = self.network_client.list_networks()
-        #
-        #    Fill net_ids with corresponding values for networks_attached_names
-        #
+        for i in range(len(networks_attached_names)):
+            for net in  networks['networks']:
+                if str(networks_attached_names[i]).find(str(net.get('name'))) != -1:
+                    net_ids.append(net.get('id'))
         # if some networks are attached to VM
         if len(net_ids) != 0:
             #show openstack configuration in vEOS
@@ -156,10 +155,13 @@ class L2Test(base.BaseNetworkTest):
         self.assertEqual(nets_attached1, nets_attached2)
         #get hostname of Compute host
         host_name = server['host']
+        networks_attached_names = nets_attached2
         net_ids = []
-        #
-        #    Fill net_ids with corresponding values for networks_attached2
-        #
+        resp, networks = self.network_client.list_networks()
+        for i in range(len(networks_attached_names)):
+            for net in  networks['networks']:
+                if str(networks_attached_names[i]).find(str(net.get('name'))) != -1:
+                    net_ids.append(net.get('id'))
         # if some networks are attached to VM
         if len(net_ids) != 0:
             #show openstack configuration in vEOS
@@ -356,22 +358,24 @@ class L2Test(base.BaseNetworkTest):
                                                  self.net_id1)
         self.assertEqual('404', res.resp['status'])
 
-    def create_test_server(self, server_name, image_ref, flavor_ref, net_id):
+    @classmethod
+    def create_test_server(cls, server_name, image_ref, flavor_ref, net_id):
         """Utility that returns a test server"""
-        resp, body = self.servers_client.create_server(server_name,
+        resp, body = cls.servers_client.create_server(server_name,
                                                        image_ref,
                                                        flavor_ref,
                                                        net_id)
         server_id = body['id']
-        self.assertEqual('202', resp['status'])
-        self.servers_client.wait_for_server_status(body['id'], 'ACTIVE')
-        resp, body = self.servers_client.get_server(body['id'],)
-        self.assertEqual('200', resp['status'])
+        cls.assertEqual('202', resp['status'])
+        cls.servers_client.wait_for_server_status(body['id'], 'ACTIVE')
+        resp, body = cls.servers_client.get_server(body['id'],)
+        cls.assertEqual('200', resp['status'])
         network_attached = body['addresses'].popitem()
         server_ip = network_attached.get('addr')
         return server_id, server_ip
 
-    def show_configuration_in_vEOS(self, ip, username, password):
+    @classmethod
+    def show_configuration_in_vEOS(cls, ip, username, password):
         """Utility that returns openstack configuration from vEOS"""
         ssh = SSHClient()
         ssh.set_missing_host_key_policy(AutoAddPolicy())
@@ -384,7 +388,8 @@ class L2Test(base.BaseNetworkTest):
         ssh.close()
         return proc
 
-    def get_MAC_addr_of_server(self, ip, username, password):
+    @classmethod
+    def get_MAC_addr_of_server(cls, ip, username, password):
         """Utility that returns MAC-address for server"""
         ssh = SSHClient()
         ssh.set_missing_host_key_policy(AutoAddPolicy())
@@ -397,8 +402,8 @@ class L2Test(base.BaseNetworkTest):
         HWaddr = str(HWaddr).strip()
         ssh.close()
         return HWaddr
-
-    def check_l2_connectivity(self, ip, username, password, HWaddr):
+    @classmethod
+    def check_l2_connectivity(cls, ip, username, password, HWaddr):
         """Utility that returns the state of l2connectivity"""
         ssh = SSHClient()
         ssh.set_missing_host_key_policy(AutoAddPolicy())
