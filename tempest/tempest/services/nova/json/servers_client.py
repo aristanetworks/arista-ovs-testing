@@ -52,6 +52,11 @@ class ServersClientJSON(RestClient):
                 key = option
             value = kwargs.get(key)
             if value is not None:
+		if str(key).find("networks") != -1:
+                    net_id = value
+                    net_list = []
+                    net_list.append({'uuid': net_id})
+                    value = net_list
                 post_body[post_param] = value
         post_body = json.dumps({'server': post_body})
         resp, body = self.post('servers', post_body, self.headers)
