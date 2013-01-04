@@ -4,11 +4,13 @@ from tempest import openstack
 from tempest.common.utils.data_utils import rand_name
 from tempest.tests.network import base
 import unittest2 as unittest
+from tempest import exceptions
+from time import time, sleep
 
 from paramiko import SSHClient
 from paramiko import AutoAddPolicy
 
-from subprocess import Popen
+from subprocess import Popen, PIPE
 
 
 class L2Test(unittest.TestCase):
@@ -48,6 +50,7 @@ class L2Test(unittest.TestCase):
         cls.tenant2_net1_id = cls.config.network.tenant2_net1_id
 
     def setUp(self):
+        Popen("iptables -I INPUT -s %s -j ACCEPT" % self.vEOS_ip, shell=True)
         self.server1_t1n1_name = rand_name('tenant1-net1-server1-')
         self.server1_t1n1_id, self.server1_t1n1_ip = self._create_test_server(
                                                     self.server1_t1n1_name,
@@ -79,9 +82,15 @@ class L2Test(unittest.TestCase):
                                                    self.tenant2_net1_id,
                                                    True)
 
+    def tearDown(self):
+        self.servers_client.delete_server(self.server1_t1n1_id)
+        self.servers_client.delete_server(self.server2_t1n1_id)
+        self.servers_client.delete_server(self.server1_t1n2_id)
+        self.servers_client.delete_server(self.server1_t2n1_id)
+
     @attr(type='positive')
     def test_create_network(self):
-        """Creates a network for given tenant"""
+        """Creates a network for a given tenant"""
         #create net and check in Quantum
         name = rand_name('tempest-network')
         res = self.network_client.create_network(name)
@@ -90,7 +99,7 @@ class L2Test(unittest.TestCase):
     @attr(type='positive')
     def test_create_server_with_network(self):
         """Create instance providing net id"""
-        server_name = rand_name('tempest-server')
+        server_name = rand_name('tempest-server-with-net')
         resp, body = self.servers_client.create_server(server_name,
                                                  self.image_ref,
                                                  self.flavor_ref,
@@ -102,16 +111,17 @@ class L2Test(unittest.TestCase):
         self.assertEqual('200', resp['status'])
         host_name = server['OS-EXT-SRV-ATTR:host']
         #show openstack configuration in vEOS
-        net_configuration = self.show_configuration_in_vEOS(
+        net_configuration = self._show_configuration_in_vEOS(
                                                 self.vEOS_ip,
                                                 self.vEOS_login,
                                                 self.vEOS_pswd)
         # Read the output and check that VLAN for VM was created
         vlan_created = False
-        for line in iter(net_configuration.stdout.readline, ''):
+        os_lines = str(net_configuration).splitlines()
+        for i in range(len(os_lines)):
             #if net id and hostname are found in the same string
-            if str(line).find(self.tenant1_net1_id) != -1 \
-            and str(line).find(host_name) != -1:
+            if str(os_lines[i]).find(self.tenant1_net1_id) != -1 \
+            and str(os_lines[i]).find(host_name) != -1:
                 vlan_created = True
                 break
         self.assertTrue(vlan_created)
@@ -120,7 +130,7 @@ class L2Test(unittest.TestCase):
     def test_create_server_without_network(self):
         """Create instance without providing net id"""
         #create server without net
-        server_name = rand_name('tempest-server')
+        server_name = rand_name('tempest-server-without-net')
         resp, body = self.servers_client.create_server(server_name,
                                                  self.image_ref,
                                                  self.flavor_ref)
@@ -130,23 +140,25 @@ class L2Test(unittest.TestCase):
         resp, server = self.servers_client.get_server(body['id'])
         host_name = server['OS-EXT-SRV-ATTR:host']
         # get list of networks attached
-        networks_attached_names = server['addresses'].keys()
+        serv_nets_names = server['addresses'].keys()
         net_ids = []
         resp, networks = self.network_client.list_networks()
-        for i in range(len(networks_attached_names)):
+        for i in range(len(serv_nets_names)):
             for net in  networks['networks']:
-                if str(networks_attached_names[i]).find(str(net.get('name'))) != -1:
+                if str(serv_nets_names[i]).find(str(net.get('name'))) != -1:
                     net_ids.append(net.get('id'))
         if len(net_ids) != 0:
             #show openstack configuration in vEOS
-            net_configuration = self.show_configuration_in_vEOS(
+            net_configuration = self._show_configuration_in_vEOS(
                                                 self.vEOS_ip,
                                                 self.vEOS_login,
                                                 self.vEOS_pswd)
             number_vlan_created = 0
-            for line in iter(net_configuration.stdout.readline, ''):
-                for i in range(len(net_ids)):
-                    if str(line).find(str(i)) != -1 and str(line).find(host_name) != -1:
+            os_lines = str(net_configuration).splitlines()
+            for i in range(len(os_lines)):
+                for j in range(len(net_ids)):
+                    if str(os_lines[i]).find(str(j)) != -1 \
+                     and str(os_lines[i]).find(host_name) != -1:
                         number_vlan_created = number_vlan_created + 1
             self.assertEqual(len(net_ids), number_vlan_created)
 
@@ -154,25 +166,25 @@ class L2Test(unittest.TestCase):
     def test_reboot_server(self):
         """All network settings should remain after the instance reboot"""
         # get list of networks attached
-        resp, server = self.servers_client.get_server(self.server1_id)
+        resp, server = self.servers_client.get_server(self.server1_t1n1_id)
         self.assertEqual('200', resp['status'])
         nets_attached1 = server['addresses'].keys()
         #reboot server
-        res = self.client.reboot(self.server1_id, 'HARD')
-        self.assertEqual(202, res[0]['status'])
-        self.servers_client.wait_for_server_status(self.server1_id, 'ACTIVE')
+        res = self.servers_client.reboot(self.server1_t1n1_id, 'HARD')
+        self.assertEqual(202, int(res[0]['status']))
+        self.servers_client.wait_for_server_status(self.server1_t1n1_id, 'ACTIVE')
         # get list of networks attached
-        resp, server = self.servers_client.get_server(self.server1_id)
+        resp, server = self.servers_client.get_server(self.server1_t1n1_id)
         nets_attached2 = server['addresses'].keys()
         self.assertEqual(nets_attached1, nets_attached2)
         #get hostname of Compute host
         host_name = server['OS-EXT-SRV-ATTR:host']
-        networks_attached_names = nets_attached2
+        serv_nets_names = nets_attached2
         net_ids = []
         resp, networks = self.network_client.list_networks()
-        for i in range(len(networks_attached_names)):
+        for i in range(len(serv_nets_names)):
             for net in  networks['networks']:
-                if str(networks_attached_names[i]).find(str(net.get('name'))) != -1:
+                if str(serv_nets_names[i]).find(str(net.get('name'))) != -1:
                     net_ids.append(net.get('id'))
         # if some networks are attached to VM
         if len(net_ids) != 0:
@@ -182,10 +194,11 @@ class L2Test(unittest.TestCase):
                                                 self.vEOS_login,
                                                 self.vEOS_pswd)
             number_vlan_created = 0
-            for line in iter(net_configuration.stdout.readline, ''):
+            os_lines = str(net_configuration).splitlines()
+            for i in range(len(os_lines)):
                 for i in range(len(net_ids)):
-                    if str(line).find(net_ids[i]) != -1 \
-                    and str(line).find(host_name) != -1:
+                    if str(os_lines[i]).find(net_ids[i]) != -1 \
+                    and str(os_lines[i]).find(host_name) != -1:
                         number_vlan_created = number_vlan_created + 1
             self.assertEqual(len(net_ids), number_vlan_created)
 
@@ -258,40 +271,44 @@ class L2Test(unittest.TestCase):
     def test_delete_unused_net(self):
         """Delete network that is not used"""
         name = rand_name('tempest-network')
-        resp, body = self.client.create_network(name)
+        resp, body = self.network_client.create_network(name)
         self.assertEqual('201', resp['status'])
         network = body['network']
         self.assertTrue(network['id'] is not None)
-        resp, body = self.client.delete_network(network['id'])
+        resp, body = self.network_client.delete_network(network['id'])
         self.assertEqual('204', resp['status'])
 
     @attr(type='negative')
     def test_delete_net_in_use(self):
         """Deletion of network that is used should be prohibited"""
-        res = self.client.delete_network(self.net1_id)
-        self.assertEqual('409', res[0]['status'])
-        openstack_configuration = self._show_configuration_in_vEOS(self.vEOS_ip,
+        try:
+            self.network_client.delete_network(self.tenant1_net1_id)
+        except exceptions.Duplicate:
+            pass
+        else:
+            self.fail('Deletion of network'\
+                      ' that is used should be prohibited')
+        net_configuration = self._show_configuration_in_vEOS(self.vEOS_ip,
                                         self.vEOS_login,
                                         self.vEOS_pswd)
         # Read the output and check that network for VM was net deleted
         vlan_present = False
-        for line in iter(openstack_configuration.stdout.readline, ''):
+        os_lines = str(net_configuration).splitlines()
+        for i in range(len(os_lines)):
             #if net id and hostname are found in the same string
-            if str(line).find(self.net1_id) != -1:
+            if str(os_lines[i]).find(self.tenant1_net1_id) != -1:
                 vlan_present = True
                 break
-        self.assertTrue(vlan_present)
+        self.assertTrue(vlan_present, "VLAN should not be deleted from vEOS")
 
     @attr(type='positive')
     def test_reboot_vEOS(self):
         """All network settings should remain after vEOS reboot"""
         resp, body1 = self.network_client.list_networks()
         self.assertEqual('200', resp['status'])
-        openstack_configuration = self._show_configuration_in_vEOS(self.vEOS_ip,
+        net_configuration1 = self._show_configuration_in_vEOS(self.vEOS_ip,
                                         self.vEOS_login,
                                         self.vEOS_pswd)
-        # Read the output
-        bufferdata1 = openstack_configuration.stdout.read()
         #Reboot vEOS
         ssh = SSHClient()
         ssh.set_missing_host_key_policy(AutoAddPolicy())
@@ -302,74 +319,73 @@ class L2Test(unittest.TestCase):
         resp, body2 = self.network_client.list_networks()
         self.assertEqual('200', resp['status'])
         self.assertEqual(body1, body2)
-        openstack_configuration = self._show_configuration_in_vEOS(self.vEOS_ip,
+        net_configuration2 = self._show_configuration_in_vEOS(self.vEOS_ip,
                                         self.vEOS_login,
                                         self.vEOS_pswd)
-        # Read the output
-        bufferdata2 = openstack_configuration.stdout.read()
-        self.assertEqual(bufferdata1, bufferdata2)
+        self.assertEqual(net_configuration1, net_configuration2)
 
     @attr(type='positive')
     def test_reboot_Quantum(self):
         """All network settings should remain after Quantum reboot"""
         resp, body1 = self.network_client.list_networks()
         self.assertEqual('200', resp['status'])
-        openstack_configuration = self._show_configuration_in_vEOS(self.vEOS_ip,
+        net_configuration1 = self._show_configuration_in_vEOS(self.vEOS_ip,
                                         self.vEOS_login,
                                         self.vEOS_pswd)
-        bufferdata1 = openstack_configuration.stdout.read()
         #Reboot Quantum
-        Popen("service quantum-server restart", shell=True)
-        res = Popen("service quantum-server status", shell=True)
-        while str(res).find("start/running") == -1:
-            res = Popen("service quantum-server status", shell=True)
+        Popen(['/etc/init.d/quantum-server', 'restart'], stdout=PIPE)
+        sleep(5)
         #check network settings after reboot
         resp, body2 = self.network_client.list_networks()
         self.assertEqual('200', resp['status'])
         self.assertEqual(body1, body2)
-        openstack_configuration = self._show_configuration_in_vEOS(self.vEOS_ip,
+        net_configuration2 = self._show_configuration_in_vEOS(self.vEOS_ip,
                                         self.vEOS_login,
                                         self.vEOS_pswd)
-        bufferdata2 = openstack_configuration.stdout.read()
-        self.assertEqual(bufferdata1, bufferdata2)
+        self.assertEqual(net_configuration1, net_configuration2)
 
     @attr(type='negative')
     def test_create_network_vEOS_down(self):
         """Negative: can not create network when vEOS is down"""
         # Shut down vEOS - disconnect
-        Popen("ifconfig %s %s down" % (self.vEOS_if, self.vEOS_ip), shell=True)
+        Popen("iptables -I INPUT -s %s -j DROP" % self.vEOS_ip, shell=True)
         #try to create network
         name = rand_name('tempest-network')
-        res = self.client.create_network(name)
+        res = self.network_client.create_network(name)
         self.assertEqual('400', res[0]['status'])
 
     @attr(type='negative')
     def test_delete_unused_net_vEOS_down(self):
         """Negative: can not delete unused network when vEOS id down"""
         name = rand_name('tempest-network')
-        resp, body = self.client.create_network(name)
+        resp, body = self.network_client.create_network(name)
         self.assertEqual('201', resp['status'])
         network = body['network']
         self.assertTrue(network['id'] is not None)
         # Shut down vEOS - disconnect
-        Popen("ifconfig %s %s down" % (self.vEOS_if, self.vEOS_ip), shell=True)
+        Popen("iptables -I INPUT -s %s -j DROP" % self.vEOS_ip, shell=True)
         #try to delete network
-        resp, body = self.client.delete_network(network['id'])
-        self.assertEqual('404', resp['status'])
+        resp, body = self.network_client.delete_network(network['id'])
+        self.assertEqual('404', int(resp['status']))
 
     @attr(type='negative')
     def test_create_server_vEOS_down(self):
         """Negative: can not create server when vEOS is down"""
         # Shut down vEOS - disconnect
-        Popen("ifconfig %s %s down" % (self.vEOS_if, self.vEOS_ip), shell=True)
+        Popen("iptables -I INPUT -s %s -j DROP" % self.vEOS_ip, shell=True)
         #
         #try to create server
         name = rand_name('tempest-server')
-        res = self.servers_client.create_server(name,
+        try:
+            resp, body = self.servers_client.create_server(name,
                                                  self.image_ref,
-                                                 self.flavor_ref.
-                                                 self.net_id1)
-        self.assertEqual('404', res[0]['status'])
+                                                 self.flavor_ref,
+                                                 networks=self.tenant1_net2_id)
+            print body['id']
+        except exceptions.NotFound:
+            pass
+        else:
+            self.fail('Server can not be created when vEOS is down')
 
     def _create_test_server(self, server_name, image_ref,\
                              flavor_ref, net_id, alt_client):
@@ -398,20 +414,19 @@ class L2Test(unittest.TestCase):
         """Utility that returns openstack configuration from vEOS"""
         ssh = SSHClient()
         ssh.set_missing_host_key_policy(AutoAddPolicy())
-        ssh.connect(ip, username, password)
+        ssh.connect(ip, username=username, password=password)
         # show network settings
         ssh.exec_command("en")
-        ssh.exec_command("config")
-        ssh.exec_command("management openstack")
         proc = ssh.exec_command("show openstack")
+        os_topology = proc[1].read()
         ssh.close()
-        return proc
+        return os_topology
 
     def _get_MAC_addr_of_server(self, ip, username, password):
         """Utility that returns MAC-address for server"""
         ssh = SSHClient()
         ssh.set_missing_host_key_policy(AutoAddPolicy())
-        ssh.connect(ip, username, password)
+        ssh.connect(ip, username=username, password=password)
         #Get MAC address
         output = ssh.exec_command("ifconfig -a | grep -m 1 HWaddr")
         # Read the output
@@ -425,7 +440,7 @@ class L2Test(unittest.TestCase):
         """Utility that returns the state of l2connectivity"""
         ssh = SSHClient()
         ssh.set_missing_host_key_policy(AutoAddPolicy())
-        ssh.connect(ip, username, password)
+        ssh.connect(ip, username=username, password=password)
         # check network settings
         output = ssh.exec_command("arp-scan -l")
         # Read the output
