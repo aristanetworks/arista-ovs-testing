@@ -192,23 +192,15 @@ class L2Test(unittest.TestCase):
                                                    self.flavor_ref,
                                                    self.tenant2_net1_id,
                                                    True)
-        HWaddr_server_t1n1 = self._get_MAC_addr_of_server(self.server1_t1n1_ip,
-                                                            self.vm_login,
-                                                            self.vm_pswd)
-        HWaddr_server_t2n1 = self._get_MAC_addr_of_server(self.server1_t2n1_ip,
-                                                            self.vm_login,
-                                                            self.vm_pswd)
         # check network settings
         serv_t2n1_available = self._check_l2_connectivity(self.server1_t1n1_ip,
                                            self.vm_login,
-                                           self.vm_pswd,
-                                           HWaddr_server_t2n1)
+                                           self.vm_pswd)
         self.assertEqual(-1, serv_t2n1_available, \
                          "Server from tenant 2 should not be available via L2")
         serv_t1n1_available = self._check_l2_connectivity(self.server1_t2n1_ip,
                                            self.vm_login,
-                                           self.vm_pswd,
-                                           HWaddr_server_t1n1)
+                                           self.vm_pswd)
         self.assertEqual(-1, serv_t1n1_available, \
                          "Server from tenant 1 should not be available via L2")
         self.servers_client.delete_server(self.server1_t1n1_id)
@@ -233,23 +225,15 @@ class L2Test(unittest.TestCase):
                                                     self.flavor_ref,
                                                     self.tenant1_net2_id,
                                                     False)
-        HWaddr_server_t1n1 = self._get_MAC_addr_of_server(self.server1_t1n1_ip,
-                                                            self.vm_login,
-                                                            self.vm_pswd)
-        HWaddr_server_t1n2 = self._get_MAC_addr_of_server(self.server1_t1n2_ip,
-                                                            self.vm_login,
-                                                            self.vm_pswd)
         # check network settings
         serv_t1n2_available = self._check_l2_connectivity(self.server1_t1n1_ip,
                                            self.vm_login,
-                                           self.vm_pswd,
-                                           HWaddr_server_t1n2)
+                                           self.vm_pswd)
         self.assertEqual(-1, serv_t1n2_available, \
             "Server from tenant1  network2 should not be available via L2")
         serv_t1n1_available = self._check_l2_connectivity(self.server1_t1n2_ip,
                                            self.vm_login,
-                                           self.vm_pswd,
-                                           HWaddr_server_t1n1)
+                                           self.vm_pswd)
         self.assertEqual(-1, serv_t1n1_available, \
             "Server from tenant1  network1 should not be  available via L2")
         self.servers_client.delete_server(self.server1_t1n1_id)
@@ -272,27 +256,17 @@ class L2Test(unittest.TestCase):
                                                     self.flavor_ref,
                                                     self.tenant1_net1_id,
                                                     False)
-        HWaddr_server1_t1n1 = self._get_MAC_addr_of_server(
-                                                    self.server1_t1n1_ip,
-                                                    self.vm_login,
-                                                    self.vm_pswd)
-        HWaddr_server2_t1n1 = self._get_MAC_addr_of_server(
-                                                    self.server2_t1n1_ip,
-                                                    self.vm_login,
-                                                    self.vm_pswd)
         # check network settings
         serv2_t1n1_available = self._check_l2_connectivity(
                                         self.server1_t1n1_ip,
                                         self.vm_login,
-                                        self.vm_pswd,
-                                        HWaddr_server2_t1n1)
+                                        self.vm_pswd)
         self.assertNotEqual(-1, serv2_t1n1_available, \
                 "Server2 from the same network should be available via L2")
         serv1_t1n1_available = self._check_l2_connectivity(
                                         self.server2_t1n1_ip,
                                         self.vm_login,
-                                        self.vm_pswd,
-                                        HWaddr_server1_t1n1)
+                                        self.vm_pswd)
         self.assertNotEqual(-1, serv1_t1n1_available, \
                 "Server1 from the same network should be available via L2")
         self.servers_client.delete_server(self.server1_t1n1_id)
@@ -562,16 +536,21 @@ class L2Test(unittest.TestCase):
         ssh.close()
         return HWaddr
 
-    def _check_l2_connectivity(self, ip, username, password, HWaddr):
+    def _check_l2_connectivity(self, ip, username, password):
         """Utility that returns the state of l2connectivity"""
         ssh = SSHClient()
         ssh.set_missing_host_key_policy(AutoAddPolicy())
         ssh.connect(ip, username=username, password=password)
+        no_connection = "Received 0 reply (0 request(s), 0 broadcast(s))"
         # check network settings
-        output = ssh.exec_command("arp-scan -l")
+        command = "sudo arping -c 3 " + ip + " | grep Received"
+        output = ssh.exec_command(command)
         # Read the output
         bufferdata = output.stdout.read()
-        found = str(bufferdata).find(HWaddr)
+        if str(bufferdata).find(no_connection) != -1:
+            found = 1
+        else:
+            found = -1
         ssh.close()
         return found
 
