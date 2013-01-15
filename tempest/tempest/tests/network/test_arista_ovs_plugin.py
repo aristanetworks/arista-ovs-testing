@@ -1,3 +1,4 @@
+
 from nose.plugins.attrib import attr
 from tempest import openstack
 from tempest.common.utils.data_utils import rand_name
@@ -114,10 +115,10 @@ class L2Test(unittest.TestCase):
                                                 self.vEOS_pswd)
             number_vlan_created = 0
             os_lines = str(net_configuration).splitlines()
-            for i in range(len(os_lines)):
-                for j in range(len(net_ids)):
-                    if str(os_lines[i]).find(str(j)) != -1 \
-                     and str(os_lines[i]).find(host_name) != -1:
+            for i in range(len(net_ids)):
+                for j in range(len(os_lines)):
+                    if str(os_lines[j]).find(str(net_ids[i])) != -1 \
+                     and str(os_lines[j]).find(host_name) != -1:
                         number_vlan_created = number_vlan_created + 1
             self.assertEqual(len(net_ids), number_vlan_created, \
                              "All required VLANs should be created in vEOS")
@@ -165,8 +166,8 @@ class L2Test(unittest.TestCase):
             number_vlan_created = 0
             os_lines = str(net_configuration).splitlines()
             for i in range(len(os_lines)):
-                for i in range(len(net_ids)):
-                    if str(os_lines[i]).find(net_ids[i]) != -1 \
+                for j in range(len(net_ids)):
+                    if str(os_lines[i]).find(net_ids[j]) != -1 \
                     and str(os_lines[i]).find(host_name) != -1:
                         number_vlan_created = number_vlan_created + 1
             self.assertEqual(len(net_ids), number_vlan_created, \
@@ -272,7 +273,7 @@ class L2Test(unittest.TestCase):
         self.servers_client.delete_server(self.server1_t1n1_id)
         self.servers_client.delete_server(self.server2_t1n1_id)
 
-    @attr(type='demo')
+    @attr(type='positive')
     def test_008_delete_unused_net(self):
         """Delete network that is not used"""
         name = rand_name('tempest-network')
@@ -288,7 +289,6 @@ class L2Test(unittest.TestCase):
                                                  networks=network['id'])
         self.assertEqual('202', resp['status'])
         self.servers_client.wait_for_server_status(body['id'], 'ACTIVE')
-        self.servers_client.delete_server(body['id'])
         #Network is unused now
         #network should be present in vEOS
         net_configuration = self._show_configuration_in_vEOS(
@@ -297,13 +297,18 @@ class L2Test(unittest.TestCase):
                                                 self.vEOS_pswd)
         vlan_created = False
         os_lines = str(net_configuration).splitlines()
+        resp, server = self.servers_client.get_server(body['id'])
+        self.assertEqual('200', resp['status'])
         for i in range(len(os_lines)):
             #if net id and hostname are found in the same string
             if str(os_lines[i]).find(network['id']) != -1 \
-                and str(os_lines[i]).find(body['OS-EXT-SRV-ATTR:host']) != -1:
+                and str(os_lines[i]).find( \
+                    str(server['OS-EXT-SRV-ATTR:host'])) != -1:
                 vlan_created = True
                 break
         self.assertTrue(vlan_created)
+        resp, serv = self.servers_client.delete_server(body['id'])
+        self.assertEqual('204', resp['status'])
         #Delete unused network
         resp, body = self.network_client.delete_network(network['id'])
         self.assertEqual('204', resp['status'])
@@ -445,15 +450,15 @@ class L2Test(unittest.TestCase):
                 "All VLANs should remain after the Quantum reboot")
         self.servers_client.delete_server(self.server1_t1n2_id)
 
-    @attr(type='negative')
+    @attr(type='demo')
     def test_012_create_network_vEOS_down(self):
-        """Negative: can not create network when vEOS is down"""
+        """Network is created successfully when vEOS is down"""
         # Shut down vEOS - disconnect
         Popen("iptables -I INPUT -s %s -j DROP" % self.vEOS_ip, shell=True)
         #try to create network
         name = rand_name('tempest-network')
         res = self.network_client.create_network(name)
-        self.assertEqual('400', res[0]['status'])
+        self.assertEqual('201', res[0]['status'])
 
     @attr(type='negative')
     def test_013_delete_unused_net_vEOS_down(self):
@@ -486,6 +491,86 @@ class L2Test(unittest.TestCase):
             pass
         else:
             self.fail('Server can not be created when vEOS is down')
+
+    @attr(type='demo')
+    def test_015_delete_server(self):
+        """Unused VLAN remains after the Server deletion"""
+        name = rand_name('tempest-network')
+        resp, body = self.network_client.create_network(name)
+        self.assertEqual('201', resp['status'])
+        network = body['network']
+        self.assertTrue(network['id'] is not None)
+        #boot server - VLAN should be created in vEOS
+        server_name = rand_name('tempest-server-with-net')
+        resp, body = self.servers_client.create_server(server_name,
+                                                 self.image_ref,
+                                                 self.flavor_ref,
+                                                 networks=network['id'])
+        self.assertEqual('202', resp['status'])
+        self.servers_client.wait_for_server_status(body['id'], 'ACTIVE')
+        self.servers_client.delete_server(body['id'])
+        #Network is unused now
+        #network should be present in vEOS
+        net_configuration = self._show_configuration_in_vEOS(
+                                                self.vEOS_ip,
+                                                self.vEOS_login,
+                                                self.vEOS_pswd)
+        vlan_present = False
+        os_lines = str(net_configuration).splitlines()
+        resp, server = self.servers_client.get_server(body['id'])
+        self.assertEqual('200', resp['status'])
+        for i in range(len(os_lines)):
+            #if net id and hostname are found in the same string
+            if str(os_lines[i]).find(network['id']) != -1 \
+                and str(os_lines[i]).find( \
+                    str(server['OS-EXT-SRV-ATTR:host'])) != -1:
+                vlan_present = True
+                break
+        self.servers_client.delete_server(body['id'])
+        self.assertTrue(vlan_present)
+
+    @attr(type='demo')
+    def test_016_delete_server_VLAN_used_by_others(self):
+        """VLAN in use remains after the Server deletion"""
+        name = rand_name('tempest-network')
+        resp, body = self.network_client.create_network(name)
+        self.assertEqual('201', resp['status'])
+        network = body['network']
+        self.assertTrue(network['id'] is not None)
+        #boot server - VLAN should be created in vEOS
+        server_name = rand_name('tempest-server-with-net')
+        resp, body1 = self.servers_client.create_server(server_name,
+                                                 self.image_ref,
+                                                 self.flavor_ref,
+                                                 networks=network['id'])
+        self.assertEqual('202', resp['status'])
+        self.servers_client.wait_for_server_status(body1['id'], 'ACTIVE')
+        resp, body2 = self.servers_client.create_server(server_name,
+                                                 self.image_ref,
+                                                 self.flavor_ref,
+                                                 networks=network['id'])
+        self.assertEqual('202', resp['status'])
+        self.servers_client.wait_for_server_status(body2['id'], 'ACTIVE')
+        self.servers_client.delete_server(body2['id'])
+        #Network is unused now
+        #network should be present in vEOS
+        net_configuration = self._show_configuration_in_vEOS(
+                                                self.vEOS_ip,
+                                                self.vEOS_login,
+                                                self.vEOS_pswd)
+        vlan_present = False
+        os_lines = str(net_configuration).splitlines()
+        resp, server = self.servers_client.get_server(body2['id'])
+        self.assertEqual('200', resp['status'])
+        for i in range(len(os_lines)):
+            #if net id and hostname are found in the same string
+            if str(os_lines[i]).find(network['id']) != -1 \
+                and str(os_lines[i]).find( \
+                    str(server['OS-EXT-SRV-ATTR:host'])) != -1:
+                vlan_present = True
+                break
+        self.servers_client.delete_server(body1['id'])
+        self.assertTrue(vlan_present)
 
     def _create_test_server(self, server_name, image_ref,\
                              flavor_ref, net_id, alt_client):
@@ -553,4 +638,5 @@ class L2Test(unittest.TestCase):
             found = -1
         ssh.close()
         return found
+
 
