@@ -392,7 +392,8 @@ class L2Test(unittest.TestCase):
         ssh.set_missing_host_key_policy(AutoAddPolicy())
         ssh.connect(self.vEOS_ip, username=self.vEOS_login,\
                                      password=self.vEOS_pswd)
-        ssh.exec_command("init 6")
+	ssh.exec_command("en")
+        ssh.exec_command("reload now")
         ssh.close()
         #check network settings after reboot
         resp, body2 = self.network_client.list_networks()
