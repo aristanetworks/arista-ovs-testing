@@ -395,6 +395,9 @@ class L2Test(unittest.TestCase):
 	ssh.exec_command("en")
         ssh.exec_command("reload now")
         ssh.close()
+	#Reboot Quantum
+        Popen(['/etc/init.d/quantum-server', 'restart'], stdout=PIPE)
+        sleep(5)
         #check network settings after reboot
         resp, body2 = self.network_client.list_networks()
         self.assertEqual('200', resp['status'])
