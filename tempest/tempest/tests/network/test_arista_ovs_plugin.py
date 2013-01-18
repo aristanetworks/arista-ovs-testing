@@ -46,7 +46,8 @@ class L2Test(unittest.TestCase):
         cls.tenant2_net1_id = cls.config.network.tenant2_net1_id
 
     def setUp(self):
-        Popen("iptables -I INPUT -s %s -j ACCEPT" % self.vEOS_ip, shell=True)
+        Popen("iptables -I INPUT -s %s -j ACCEPT" % self.vEOS_ip,\
+                                         shell=True, stdout=PIPE)
 
     @attr(type='demo')
     def test_001_create_network(self):
@@ -389,7 +390,7 @@ class L2Test(unittest.TestCase):
                 break
         self.assertTrue(vlan_created, "VLAN should be created in vEOS")
         #Reboot Quantum
-        Popen(['/etc/init.d/quantum-server', 'restart'], stdout=PIPE)
+        Popen('/etc/init.d/quantum-server restart', shell=True, stdout=PIPE)
         sleep(5)
         #check network settings after reboot
         resp, body2 = self.network_client.list_networks()
@@ -407,7 +408,8 @@ class L2Test(unittest.TestCase):
     def test_011_create_network_vEOS_down(self):
         """Network is created successfully when vEOS is down"""
         # Shut down vEOS - disconnect
-        Popen("iptables -I INPUT -s %s -j DROP" % self.vEOS_ip, shell=True)
+        Popen("iptables -I INPUT -s %s -j DROP" % self.vEOS_ip,\
+                                        shell=True, stdout=PIPE)
         #try to create network
         name = rand_name('tempest-network')
         res = self.network_client.create_network(name)
@@ -422,16 +424,22 @@ class L2Test(unittest.TestCase):
         network = body['network']
         self.assertTrue(network['id'] is not None)
         # Shut down vEOS - disconnect
-        Popen("iptables -I INPUT -s %s -j DROP" % self.vEOS_ip, shell=True)
+        Popen("iptables -I INPUT -s %s -j DROP" % self.vEOS_ip, \
+                                        shell=True, stdout=PIPE)
         #try to delete network
-        resp, body = self.network_client.delete_network(network['id'])
-        self.assertEqual('404', int(resp['status']))
+        try:
+            resp, body = self.network_client.delete_network(network['id'])
+        except exceptions.ComputeFault:
+            pass
+        else:
+            self.fail('Unused network can not be deleted when vEOS is down')
 
     @attr(type='demo')
     def test_013_create_server_vEOS_down(self):
         """Negative: can not create server when vEOS is down"""
         # Shut down vEOS - disconnect
-        Popen("iptables -I INPUT -s %s -j DROP" % self.vEOS_ip, shell=True)
+        Popen("iptables -I INPUT -s %s -j DROP" % self.vEOS_ip, \
+                                        shell=True, stdout=PIPE)
         #
         #try to create server
         name = rand_name('tempest-server')
@@ -480,7 +488,8 @@ class L2Test(unittest.TestCase):
                 vlan_present = True
                 break
         self.servers_client.delete_server(body['id'])
-        Popen("iptables -I INPUT -s %s -j ACCEPT" % self.vEOS_ip, shell=True)
+        Popen("iptables -I INPUT -s %s -j ACCEPT" % self.vEOS_ip,\
+                                         shell=True, stdout=PIPE)
         self.assertTrue(vlan_present)
 
     @attr(type='demo')
