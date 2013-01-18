@@ -273,10 +273,10 @@ class L2Test(unittest.TestCase):
         self.servers_client.delete_server(self.server1_t1n1_id)
         self.servers_client.delete_server(self.server2_t1n1_id)
 
-    @attr(type='positive')
+    @attr(type='demo')
     def test_008_delete_unused_net(self):
         """Delete network that is not used"""
-        name = rand_name('tempest-network')
+        name = rand_name('tempest-network-')
         resp, body = self.network_client.create_network(name)
         self.assertEqual('201', resp['status'])
         network = body['network']
@@ -309,6 +309,7 @@ class L2Test(unittest.TestCase):
         self.assertTrue(vlan_created)
         resp, serv = self.servers_client.delete_server(body['id'])
         self.assertEqual('204', resp['status'])
+        self.servers_client.wait_for_server_termination(body['id'])
         #Delete unused network
         resp, body = self.network_client.delete_network(network['id'])
         self.assertEqual('204', resp['status'])
@@ -392,12 +393,12 @@ class L2Test(unittest.TestCase):
         ssh.set_missing_host_key_policy(AutoAddPolicy())
         ssh.connect(self.vEOS_ip, username=self.vEOS_login,\
                                      password=self.vEOS_pswd)
-	ssh.exec_command("en")
+        ssh.exec_command("en")
         ssh.exec_command("reload now")
         ssh.close()
-	#Reboot Quantum
-        Popen(['/etc/init.d/quantum-server', 'restart'], stdout=PIPE)
-        sleep(5)
+#        #Reboot Quantum
+#        Popen(['/etc/init.d/quantum-server', 'restart'], stdout=PIPE)
+#        sleep(5)
         #check network settings after reboot
         resp, body2 = self.network_client.list_networks()
         self.assertEqual('200', resp['status'])
@@ -464,7 +465,7 @@ class L2Test(unittest.TestCase):
         res = self.network_client.create_network(name)
         self.assertEqual('201', res[0]['status'])
 
-    @attr(type='negative')
+    @attr(type='demo')
     def test_013_delete_unused_net_vEOS_down(self):
         """Negative: can not delete unused network when vEOS is down"""
         name = rand_name('tempest-network')
@@ -478,7 +479,7 @@ class L2Test(unittest.TestCase):
         resp, body = self.network_client.delete_network(network['id'])
         self.assertEqual('404', int(resp['status']))
 
-    @attr(type='negative')
+    @attr(type='demo')
     def test_014_create_server_vEOS_down(self):
         """Negative: can not create server when vEOS is down"""
         # Shut down vEOS - disconnect
@@ -491,7 +492,7 @@ class L2Test(unittest.TestCase):
                                                  self.image_ref,
                                                  self.flavor_ref,
                                                  networks=self.tenant1_net2_id)
-        except exceptions.NotFound:
+        except exceptions.BuildErrorException:
             pass
         else:
             self.fail('Server can not be created when vEOS is down')
@@ -531,6 +532,7 @@ class L2Test(unittest.TestCase):
                 vlan_present = True
                 break
         self.servers_client.delete_server(body['id'])
+        Popen("iptables -I INPUT -s %s -j ACCEPT" % self.vEOS_ip, shell=True)
         self.assertTrue(vlan_present)
 
     @attr(type='demo')
