@@ -360,59 +360,7 @@ class L2Test(unittest.TestCase):
         self.servers_client.delete_server(self.server1_t1n1_id)
 
     @attr(type='demo')
-    def test_010_reboot_vEOS(self):
-        """All network settings should remain after vEOS reboot"""
-        # create instance to add VLAN to vEOS
-        self.server1_t1n1_name = rand_name('tenant1-net1-server1-')
-        self.server1_t1n1_id, self.server1_t1n1_ip = self._create_test_server(
-                                                    self.server1_t1n1_name,
-                                                    self.image_ref,
-                                                    self.flavor_ref,
-                                                    self.tenant1_net1_id,
-                                                    False)
-        resp, server = self.servers_client.get_server(self.server1_t1n1_id)
-        self.assertEqual('200', resp['status'])
-        host_name = server['OS-EXT-SRV-ATTR:host']
-        #Network should be created in vEOS
-        resp, body1 = self.network_client.list_networks()
-        self.assertEqual('200', resp['status'])
-        net_configuration1 = self._show_configuration_in_vEOS(self.vEOS_ip,
-                                        self.vEOS_login,
-                                        self.vEOS_pswd)
-        vlan_created = False
-        os_lines = str(net_configuration1).splitlines()
-        for i in range(len(os_lines)):
-            #if net id and hostname are found in the same string
-            if str(os_lines[i]).find(self.tenant1_net1_id) != -1 \
-                and str(os_lines[i]).find(host_name) != -1:
-                vlan_created = True
-                break
-        self.assertTrue(vlan_created, "VLAN should be created in vEOS")
-        #Reboot vEOS
-        ssh = SSHClient()
-        ssh.set_missing_host_key_policy(AutoAddPolicy())
-        ssh.connect(self.vEOS_ip, username=self.vEOS_login,\
-                                     password=self.vEOS_pswd)
-        ssh.exec_command("en")
-        ssh.exec_command("reload now")
-        ssh.close()
-#        #Reboot Quantum
-#        Popen(['/etc/init.d/quantum-server', 'restart'], stdout=PIPE)
-#        sleep(5)
-        #check network settings after reboot
-        resp, body2 = self.network_client.list_networks()
-        self.assertEqual('200', resp['status'])
-        self.assertEqual(body1, body2, \
-                "All networks should remain after the vEOS reboot")
-        net_configuration2 = self._show_configuration_in_vEOS(self.vEOS_ip,
-                                        self.vEOS_login,
-                                        self.vEOS_pswd)
-        self.assertEqual(net_configuration1, net_configuration2, \
-                         "All VLANs should remain after the vEOS reboot")
-        self.servers_client.delete_server(self.server1_t1n1_id)
-
-    @attr(type='demo')
-    def test_011_reboot_Quantum(self):
+    def test_010_reboot_Quantum(self):
         """All network settings should remain after Quantum reboot"""
         # create instance to add VLAN to vEOS
         self.server1_t1n2_name = rand_name('tenant1-net1-server1-')
@@ -456,7 +404,7 @@ class L2Test(unittest.TestCase):
         self.servers_client.delete_server(self.server1_t1n2_id)
 
     @attr(type='demo')
-    def test_012_create_network_vEOS_down(self):
+    def test_011_create_network_vEOS_down(self):
         """Network is created successfully when vEOS is down"""
         # Shut down vEOS - disconnect
         Popen("iptables -I INPUT -s %s -j DROP" % self.vEOS_ip, shell=True)
@@ -466,7 +414,7 @@ class L2Test(unittest.TestCase):
         self.assertEqual('201', res[0]['status'])
 
     @attr(type='demo')
-    def test_013_delete_unused_net_vEOS_down(self):
+    def test_012_delete_unused_net_vEOS_down(self):
         """Negative: can not delete unused network when vEOS is down"""
         name = rand_name('tempest-network')
         resp, body = self.network_client.create_network(name)
@@ -480,7 +428,7 @@ class L2Test(unittest.TestCase):
         self.assertEqual('404', int(resp['status']))
 
     @attr(type='demo')
-    def test_014_create_server_vEOS_down(self):
+    def test_013_create_server_vEOS_down(self):
         """Negative: can not create server when vEOS is down"""
         # Shut down vEOS - disconnect
         Popen("iptables -I INPUT -s %s -j DROP" % self.vEOS_ip, shell=True)
@@ -498,7 +446,7 @@ class L2Test(unittest.TestCase):
             self.fail('Server can not be created when vEOS is down')
 
     @attr(type='demo')
-    def test_015_delete_server(self):
+    def test_014_delete_server(self):
         """Unused VLAN remains after the Server deletion"""
         name = rand_name('tempest-network')
         resp, body = self.network_client.create_network(name)
@@ -536,7 +484,7 @@ class L2Test(unittest.TestCase):
         self.assertTrue(vlan_present)
 
     @attr(type='demo')
-    def test_016_delete_server_VLAN_used_by_others(self):
+    def test_015_delete_server_VLAN_used_by_others(self):
         """VLAN in use remains after the Server deletion"""
         name = rand_name('tempest-network')
         resp, body = self.network_client.create_network(name)
