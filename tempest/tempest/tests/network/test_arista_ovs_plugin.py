@@ -914,7 +914,7 @@ class L2Test(unittest.TestCase):
         """Utility that returns the state of l2connectivity"""
         ssh = SSHClient()
         ssh.set_missing_host_key_policy(AutoAddPolicy())
-        ping = Popen(["ping", "-c", "60", ip],\
+        ping = Popen(["ping", "-c", "200", ip],\
                                      shell=False, stdout=PIPE)
         ping.wait()
         if ping.returncode != 0:
@@ -928,7 +928,6 @@ class L2Test(unittest.TestCase):
         output = ssh.exec_command(command)
         # Read the output
         bufferdata = output[1].read()
-        print bufferdata
         if str(bufferdata).find(no_connection) != -1:
             found = -1
         else:
