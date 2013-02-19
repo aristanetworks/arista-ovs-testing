@@ -40,7 +40,7 @@ class ServersClientJSON(RestClient):
         }
 
         for option in ['personality', 'adminPass', 'key_name',
-                       'security_groups', 'networks', 'user_data',
+                       'security_groups', 'networks', 'port', 'user_data',
                        'availability_zone', 'accessIPv4', 'accessIPv6',
                        'min_count', 'max_count', ('metadata', 'meta'),
                        ('OS-DCF:diskConfig', 'disk_config')]:
@@ -52,10 +52,16 @@ class ServersClientJSON(RestClient):
                 key = option
             value = kwargs.get(key)
             if value is not None:
-		if str(key).find("networks") != -1:
+                if str(key).find("networks") != -1:
                     net_id = value
                     net_list = []
                     net_list.append({'uuid': net_id})
+                    value = net_list
+                elif str(key).find("port") != -1:
+                    post_param = "networks"
+                    net_id = value
+                    net_list = []
+                    net_list.append({'port': net_id})
                     value = net_list
                 post_body[post_param] = value
         post_body = json.dumps({'server': post_body})

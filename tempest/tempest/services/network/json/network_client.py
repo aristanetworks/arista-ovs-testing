@@ -45,29 +45,29 @@ class NetworkClient(RestClient):
         resp, body = self.delete('networks/%s' % uuid)
         return resp, body
 
-    def create_port(self, network_id, zone, state=None, key='port'):
+    def create_port(self, name, network_id, state=None, key='port'):
         if not state:
             state = 'ACTIVE'
         post_body = {
             key: {
-                'state': state,
-                'nova_id': zone
+                'name': name,
+                'admin_state_up': True,
+                'network_id': network_id,
             }
         }
         headers = {'Content-Type': 'application/json'}
         body = json.dumps(post_body)
-        resp, body = self.post('networks/%s/ports.json' % network_id,
-                               headers=headers, body=body)
+        resp, body = self.post('ports.json', headers=headers, body=body)
         body = json.loads(body)
         return resp, body
 
-    def delete_port(self, network_id, port_id):
-        resp, body = self.delete('networks/%s/ports/%s.json' %
-                                 (network_id, port_id))
+    def delete_port(self, port_id):
+        resp, body = self.delete('ports/%s.json' % port_id)
         return resp, body
 
-    def list_ports(self, network_id):
-        resp, body = self.get('networks/%s/ports.json' % network_id)
+    def list_ports(self):
+        #resp, body = self.get('networks/%s/ports.json' % network_id)
+        resp, body = self.get('/ports.json')
         body = json.loads(body)
         return resp, body
 
