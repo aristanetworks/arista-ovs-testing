@@ -290,7 +290,8 @@ class L2Test(unittest.TestCase):
                                            self.vm_pswd,
                                            self.server1_t2n1_ip,
                                            self.use_namespaces,
-                                           self.namespace1_1)
+                                           self.namespace1_1,
+                                           self.namespace2_1)
         self.assertEqual(-1, serv_t2n1_available, \
                          "Server from tenant 2 should not be available via L2")
         serv_t1n1_available = self._check_l2_connectivity(self.server1_t2n1_ip,
@@ -298,7 +299,8 @@ class L2Test(unittest.TestCase):
                                            self.vm_pswd,
                                            self.server1_t1n1_ip,
                                            self.use_namespaces,
-                                           self.namespace2_1)
+                                           self.namespace2_1,
+                                           self.namespace1_1)
         self.assertEqual(-1, serv_t1n1_available, \
                          "Server from tenant 1 should not be available via L2")
         self.servers_client.delete_server(self.server1_t2n1_id)
@@ -328,7 +330,8 @@ class L2Test(unittest.TestCase):
                                            self.vm_pswd,
                                            self.server1_t1n2_ip,
                                            self.use_namespaces,
-                                           self.namespace1_1)
+                                           self.namespace1_1,
+                                           self.namespace1_2)
         self.assertEqual(-1, serv_t1n2_available, \
             "Server from tenant1  network2 should not be available via L2")
         serv_t1n1_available = self._check_l2_connectivity(self.server1_t1n2_ip,
@@ -336,7 +339,8 @@ class L2Test(unittest.TestCase):
                                            self.vm_pswd,
                                            self.server1_t1n1_ip,
                                            self.use_namespaces,
-                                           self.namespace1_2)
+                                           self.namespace1_2,
+                                           self.namespace1_1)
         self.assertEqual(-1, serv_t1n1_available, \
             "Server from tenant1  network1 should not be  available via L2")
 
@@ -364,6 +368,7 @@ class L2Test(unittest.TestCase):
                                         self.vm_pswd,
                                         self.server2_t1n1_ip,
                                         self.use_namespaces,
+                                        self.namespace1_1,
                                         self.namespace1_1)
         self.assertNotEqual(-1, serv2_t1n1_available, \
                 "Server2 from the same network should be available via L2")
@@ -373,6 +378,7 @@ class L2Test(unittest.TestCase):
                                         self.vm_pswd,
                                         self.server1_t1n1_ip,
                                         self.use_namespaces,
+                                        self.namespace1_1,
                                         self.namespace1_1)
         self.assertNotEqual(-1, serv1_t1n1_available, \
                 "Server1 from the same network should be available via L2")
@@ -946,10 +952,11 @@ class L2Test(unittest.TestCase):
         return os_topology
 
     def _check_l2_connectivity(self, ip, username, password, to_ip,
-                                     use_namespaces, namespace):
+                                     use_namespaces, namespace, to_namespace):
         if use_namespaces:
             custom = CustomLab(ip, to_ip)
-            found = custom.check_l2_connectivity(username, password, namespace)
+            found = custom.check_l2_connectivity(username, password,\
+                                                 namespace, to_namespace)
         else:
             local = LocalLab(ip, to_ip)
             found = local.check_l2_connectivity(username, password)
@@ -992,21 +999,21 @@ class LocalLab(BaseLab):
 
 class CustomLab(BaseLab):
 
-    def check_l2_connectivity_fabric(self, username, password, namespace):
+    def check_l2_connectivity(self, username, password, \
+                                namespace, to_namespace):
         """Utility that returns the state of l2connectivity"""
         found = 0
+        file = "/opt/stack/arista-ovs-testing/tempest/tempest/tests/network/passless_ssh.exp"
         #prepare fabric
-        #with fabric.context_managers.prefix('source ' + self.env_path):
-        result = fabric.api.run('ip netns exec %s ping -c 300 %s' \
-                                     % namespace % self.ip)
-        if str(result).find("0% packet loss"):
-            output = fabric.api.run('ip netns exec %s ssh -f %s@%s -P %s; sudo arping -c 20 %s' \
-                    % namespace % username % self.ip % password % self.to_ip)
-            no_connection = "Received 0 reply (0 request(s), 0 broadcast(s))"
-            if str(output).find(no_connection) != -1:
-                found = -1
-            else:
-                found = 1
+        fabric.api.env["host_string"] = "os-admin@172.27.6.253:22"
+        fabric.api.env["password"] = "a12345"
+        fabric.api.run('expect  tempest/tests/network/passless_ssh.exp %s %s' \
+                           % (self.ip, namespace))
+        output = fabric.api.run('ip netns exec %s sudo arping -c 20 %s' \
+                    % (to_namespace, self.to_ip))
+        no_connection = "Received 0 reply (0 request(s), 0 broadcast(s))"
+        if str(output).find(no_connection) != -1:
+            found = -1
         else:
-            self.fail('Failed to ping host.')
+            found = 1
         return found
