@@ -141,6 +141,11 @@ class ComputeConfig(BaseConfig):
         return self.get("username", "demo")
 
     @property
+    def use_host_name(self):
+        """Indicates that host parameter will be used for VMs scheduling"""
+        return self.get("use_host_name", "True")
+
+    @property
     def tenant_name(self):
         """Tenant name to use for Nova API requests."""
         return self.get("tenant_name", "demo")
@@ -359,7 +364,6 @@ class NetworkConfig(BaseConfig):
         """Version of Quantum API"""
         return self.get("api_version", "v1.1")
 
-        
     @property
     def tenant1_net1_id(self):
         """Network 1 in tenant 1 id"""
@@ -373,27 +377,37 @@ class NetworkConfig(BaseConfig):
     @property
     def tenant2_net1_id(self):
         """Network 1 in tenant 2 id"""
-        return self.get("tenant2_net1_id", "3")   
- 
+        return self.get("tenant2_net1_id", "3")
+
     @property
-    def vEOS_ip(self):
-        """vEOS ip to ssh"""
-        return self.get("vEOS_ip", "1.1.1.1")
-    
-    @property        
-    def vEOS_login(self):
-        """vEOS username to ssh"""
-        return self.get("vEOS_login", "root")
-    
+    def namespace1_1(self):
+        """Namespace for Network 1 in tenant 1 id"""
+        return self.get("namespace1_1", "name")
+
     @property
-    def vEOS_pswd(self):
-        """vEOS password to ssh"""
-        return self.get("vEOS_pswd", "test")
-    
+    def namespace1_2(self):
+        """Namespace for Network 1 in tenant 1 id"""
+        return self.get("namespace1_2", "name")
+
     @property
-    def vEOS_if(self):
-        """Interface of controller for vEOS"""
-        return self.get("vEOS_if", "br100")    
+    def namespace2_1(self):
+        """Namespace for Network 1 in tenant 1 id"""
+        return self.get("namespace2_1", "name")
+
+    @property
+    def dhcp_agent_ini(self):
+        """Configuration file for Quantum dhcp-agent"""
+        return self.get("dhcp_agent_ini", "/etc/quantum/dhcp_agent.ini")
+
+    @property
+    def arista_driver_ini(self):
+        """Configuration file for Quantum arista_driver.ini"""
+        return self.get("arista_driver_ini", "/etc/quantum/hardware_driver/arista_driver.ini")
+
+    @property
+    def vEOS_is_apart(self):
+        """If vEOS is separate from TOR - do not check if VLANs are active"""
+        return self.get("vEOS_is_apart", "True")
 
 
 class VolumeConfig(BaseConfig):

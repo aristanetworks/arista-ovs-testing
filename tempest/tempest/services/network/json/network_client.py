@@ -72,7 +72,7 @@ class NetworkClient(RestClient):
         return resp, body
 
     def list_port_details(self, network_id):
-        url = 'networks/%s/ports/detail.json' % network_id
+        url = '/ports/detail.json' % network_id
         resp, body = self.get(url)
         body = json.loads(body)
         return resp, body

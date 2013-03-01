@@ -6,6 +6,9 @@ from tempest import exceptions
 from time import sleep
 import jsonrpclib
 import os
+import ConfigParser
+import fabric.api
+import fabric.context_managers
 
 from paramiko import SSHClient
 from paramiko import AutoAddPolicy
@@ -22,11 +25,6 @@ class L2Test(unittest.TestCase):
         cls.network_client = cls.os.network_client
         cls.config = cls.os.config
 
-        cls.vEOS_ip = cls.config.network.vEOS_ip
-        cls.vEOS_login = cls.config.network.vEOS_login
-        cls.vEOS_pswd = cls.config.network.vEOS_pswd
-        cls.vEOS_if = cls.config.network.vEOS_if
-
         #set up Alt Client
         cls.alt_manager = openstack.AltManager()
         cls.alt_servers_client = cls.alt_manager.servers_client
@@ -40,19 +38,45 @@ class L2Test(unittest.TestCase):
         cls.flavor_ref = cls.config.compute.flavor_ref
         cls.vm_login = cls.config.compute.ssh_user
         cls.vm_pswd = cls.config.compute.ssh_pswd
+        cls.use_host_name = cls.config.compute.use_host_name
 
         #get test networks
         cls.tenant1_net1_id = cls.config.network.tenant1_net1_id
+        cls.namespace1_1 = cls.config.network.namespace1_1
         cls.tenant1_net2_id = cls.config.network.tenant1_net2_id
+        cls.namespace1_2 = cls.config.network.namespace1_2
         cls.tenant2_net1_id = cls.config.network.tenant2_net1_id
+        cls.namespace2_1 = cls.config.network.namespace2_1
 
-        cls.url = 'https://admin:r00tme@172.18.195.212/command-api'
+        #get "use_namespaces" parameter
+        cls.dhcp_agent_ini = cls.config.network.dhcp_agent_ini
+        cls.configure = ConfigParser.ConfigParser()
+        cls.configure.read(cls.dhcp_agent_ini)
+        cls.use_namespaces = cls.configure.getboolean("DEFAULT", "use_namespaces")
+
+        #get vEOS access parameters
+        cls.arista_driver_ini = cls.config.network.arista_driver_ini
+        cls.configure = ConfigParser.ConfigParser()
+        cls.configure.read(cls.arista_driver_ini)
+        cls.vEOS_ip = cls.configure.get("ARISTA_DRIVER", "arista_eapi_host")
+        cls.vEOS_login = cls.configure.get("ARISTA_DRIVER", "arista_eapi_user")
+        cls.vEOS_pswd = cls.configure.get("ARISTA_DRIVER", "arista_eapi_pass")
+
+        cls.url = 'https://' + cls.vEOS_login + ':' + cls.vEOS_pswd + '@' + \
+                                cls.vEOS_ip + '/command-api'
         cls.server = jsonrpclib.Server(cls.url)
+
+        cls.vEOS_is_apart = cls.config.network.vEOS_is_apart
+
+        if cls.use_host_name == True:
+            cls.hostname = 'OS-EXT-SRV-ATTR:host'
+        else:
+            cls.hostname = 'OS-EXT-SRV-ATTR:hypervisor_hostname'
 
     def setUp(self):
         """Clean environment before a test is executed"""
         with open(os.devnull, "w") as fnull:
-            Popen("iptables -D OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
+            Popen("sudo iptables -D OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
                                     shell=True, stdout=fnull, stderr=fnull)
         resp, body = self.servers_client.list_servers_with_detail()
         #print body['servers']
@@ -67,7 +91,6 @@ class L2Test(unittest.TestCase):
         self.assertEqual('200', resp['status'])
         for port in body['ports']:
             if str(port['name']).find("tempest") != -1:
-                print port['name']
                 resp, body = self.network_client.delete_port(port['id'])
         resp, body = self.network_client.list_networks()
         self.assertEqual('200', resp['status'])
@@ -112,7 +135,7 @@ class L2Test(unittest.TestCase):
         #get hostname of Compute host
         resp, server = self.servers_client.get_server(body['id'])
         self.assertEqual('200', resp['status'])
-        host_name = server['OS-EXT-SRV-ATTR:hypervisor_hostname']
+        host_name = server[self.hostname]
         net_info = server['addresses'].keys()
         self.assertEqual(str(network['name']), str(net_info[0]))
         #show openstack configuration in vEOS
@@ -131,24 +154,25 @@ class L2Test(unittest.TestCase):
                 vlan_info = str(i)
                 break
         self.assertTrue(vlan_created, "VLAN should be created in vEOS")
-        #check if VLAN is up
-        vlans = self._show_vlan_in_vEOS(self.vEOS_ip,
+        if not(self.vEOS_is_apart):
+            #check if VLAN is up
+            vlans = self._show_vlan_in_vEOS(self.vEOS_ip,
                                         self.vEOS_login,
                                         self.vEOS_pswd)
-        vlan_lines = str(vlans).splitlines()
-        vlan_up = False
-        vlan_info_list = vlan_info.split(' ')
-        vlan_list = list()
-        for i in vlan_info_list:
-            if str(i) != '':
-                vlan_list.append(i)
-        vlan_id = vlan_list[2]
-        for v in vlan_lines:
-            if str(v).find(vlan_id) != -1 and \
-               str(v).find("active") != -1:
-                vlan_up = True
-                break
-        self.assertTrue(vlan_up, "VLAN should be active in vEOS")
+            vlan_lines = str(vlans).splitlines()
+            vlan_up = False
+            vlan_info_list = vlan_info.split(' ')
+            vlan_list = list()
+            for i in vlan_info_list:
+                if str(i) != '':
+                    vlan_list.append(i)
+            vlan_id = vlan_list[2]
+            for v in vlan_lines:
+                if str(v).find(vlan_id) != -1 and \
+                    str(v).find("active") != -1:
+                    vlan_up = True
+                    break
+            self.assertTrue(vlan_up, "VLAN should be active in vEOS")
 
     @attr(type='positive')
     def test_003_create_server_without_network(self):
@@ -162,7 +186,7 @@ class L2Test(unittest.TestCase):
         self.servers_client.wait_for_server_status(body['id'], 'ACTIVE')
         #get hostname of Compute host
         resp, server = self.servers_client.get_server(body['id'])
-        host_name = server['OS-EXT-SRV-ATTR:hypervisor_hostname']
+        host_name = server[self.hostname]
         # get list of networks attached
         serv_nets_names = server['addresses'].keys()
         net_ids = []
@@ -216,7 +240,7 @@ class L2Test(unittest.TestCase):
         self.assertEqual(nets_attached1, nets_attached2, \
                          "All networks should remain after the server reboot")
         #get hostname of Compute host
-        host_name = server['OS-EXT-SRV-ATTR:hypervisor_hostname']
+        host_name = server[self.hostname]
         serv_nets_names = nets_attached2
         net_ids = []
         resp, networks = self.network_client.list_networks()
@@ -264,13 +288,17 @@ class L2Test(unittest.TestCase):
         serv_t2n1_available = self._check_l2_connectivity(self.server1_t1n1_ip,
                                            self.vm_login,
                                            self.vm_pswd,
-                                           self.server1_t2n1_ip)
+                                           self.server1_t2n1_ip,
+                                           self.use_namespaces,
+                                           self.namespace1_1)
         self.assertEqual(-1, serv_t2n1_available, \
                          "Server from tenant 2 should not be available via L2")
         serv_t1n1_available = self._check_l2_connectivity(self.server1_t2n1_ip,
                                            self.vm_login,
                                            self.vm_pswd,
-                                           self.server1_t1n1_ip)
+                                           self.server1_t1n1_ip,
+                                           self.use_namespaces,
+                                           self.namespace2_1)
         self.assertEqual(-1, serv_t1n1_available, \
                          "Server from tenant 1 should not be available via L2")
         self.servers_client.delete_server(self.server1_t2n1_id)
@@ -298,13 +326,17 @@ class L2Test(unittest.TestCase):
         serv_t1n2_available = self._check_l2_connectivity(self.server1_t1n1_ip,
                                            self.vm_login,
                                            self.vm_pswd,
-                                           self.server1_t1n2_ip)
+                                           self.server1_t1n2_ip,
+                                           self.use_namespaces,
+                                           self.namespace1_1)
         self.assertEqual(-1, serv_t1n2_available, \
             "Server from tenant1  network2 should not be available via L2")
         serv_t1n1_available = self._check_l2_connectivity(self.server1_t1n2_ip,
                                            self.vm_login,
                                            self.vm_pswd,
-                                           self.server1_t1n1_ip)
+                                           self.server1_t1n1_ip,
+                                           self.use_namespaces,
+                                           self.namespace1_2)
         self.assertEqual(-1, serv_t1n1_available, \
             "Server from tenant1  network1 should not be  available via L2")
 
@@ -330,14 +362,18 @@ class L2Test(unittest.TestCase):
                                         self.server1_t1n1_ip,
                                         self.vm_login,
                                         self.vm_pswd,
-                                        self.server2_t1n1_ip)
+                                        self.server2_t1n1_ip,
+                                        self.use_namespaces,
+                                        self.namespace1_1)
         self.assertNotEqual(-1, serv2_t1n1_available, \
                 "Server2 from the same network should be available via L2")
         serv1_t1n1_available = self._check_l2_connectivity(
                                         self.server2_t1n1_ip,
                                         self.vm_login,
                                         self.vm_pswd,
-                                        self.server1_t1n1_ip)
+                                        self.server1_t1n1_ip,
+                                        self.use_namespaces,
+                                        self.namespace1_1)
         self.assertNotEqual(-1, serv1_t1n1_available, \
                 "Server1 from the same network should be available via L2")
 
@@ -370,7 +406,7 @@ class L2Test(unittest.TestCase):
         for i in os_lines:
             #if net id and hostname are found in the same string
             if str(i).find(network['id']) != -1 and \
-               str(i).find(str(server['OS-EXT-SRV-ATTR:hypervisor_hostname'])) != -1:
+               str(i).find(str(server[self.hostname])) != -1:
                 vlan_created = True
                 break
         self.assertTrue(vlan_created)
@@ -456,7 +492,7 @@ class L2Test(unittest.TestCase):
                                                     False)
         resp, server = self.servers_client.get_server(self.server1_t1n2_id)
         self.assertEqual('200', resp['status'])
-        host_name = server['OS-EXT-SRV-ATTR:hypervisor_hostname']
+        host_name = server[self.hostname]
         #VLAN should be created in vEOS
         resp, body1 = self.network_client.list_networks()
         self.assertEqual('200', resp['status'])
@@ -517,7 +553,7 @@ class L2Test(unittest.TestCase):
         for i in os_lines:
             #if net id and hostname are found in the same string
             if str(i).find(network['id']) != -1 and \
-               str(i).find(str(server['OS-EXT-SRV-ATTR:hypervisor_hostname'])) != -1:
+               str(i).find(str(server[self.hostname])) != -1:
                 vlan_present = True
                 break
         self.assertTrue(vlan_present)
@@ -540,7 +576,7 @@ class L2Test(unittest.TestCase):
         self.servers_client.wait_for_server_status(body1['id'], 'ACTIVE')
         resp1, server1 = self.servers_client.get_server(body1['id'])
         self.assertEqual('200', resp1['status'])
-        host1 = server1['OS-EXT-SRV-ATTR:hypervisor_hostname']
+        host1 = server1[self.hostname]
         # boot VM2
         server_name = rand_name('012-tempest-server2-')
         resp2, body2 = self.servers_client.create_server(server_name,
@@ -551,7 +587,7 @@ class L2Test(unittest.TestCase):
         self.servers_client.wait_for_server_status(body2['id'], 'ACTIVE')
         resp2, server2 = self.servers_client.get_server(body2['id'])
         self.assertEqual('200', resp2['status'])
-        host2 = server2['OS-EXT-SRV-ATTR:hypervisor_hostname']
+        host2 = server2[self.hostname]
         if str(host1) != str(host2):
             # boot VM3
             server_name = rand_name('012-tempest-server3-')
@@ -563,7 +599,7 @@ class L2Test(unittest.TestCase):
             self.servers_client.wait_for_server_status(body3['id'], 'ACTIVE')
             resp3, server3 = self.servers_client.get_server(body3['id'])
             self.assertEqual('200', resp3['status'])
-            host3 = server3['OS-EXT-SRV-ATTR:hypervisor_hostname']
+            host3 = server3[self.hostname]
             resp, body = self.servers_client.delete_server(body3['id'])
             self.assertEqual('204', resp['status'])
             self.servers_client.wait_for_server_termination(body3['id'])
@@ -606,7 +642,7 @@ class L2Test(unittest.TestCase):
     def test_013_vEOS_sync_with_new_networks(self):
         """013 - No new tenant-networks in vEOS after sync"""
         # Shut down vEOS - disconnect
-        Popen("iptables -I OUTPUT -d %s/32 -j DROP" % self.vEOS_ip,\
+        Popen("sudo iptables -I OUTPUT -d %s/32 -j DROP" % self.vEOS_ip,\
                                         shell=True, stdout=PIPE)
         #try to create network
         name = rand_name('013-tempest-network')
@@ -623,7 +659,7 @@ class L2Test(unittest.TestCase):
                 break
         self.assertTrue(net_created)
         #network should not be present in vEOS
-        Popen("iptables -D OUTPUT -d %s/32 -j DROP" % self.vEOS_ip,\
+        Popen("sudo iptables -D OUTPUT -d %s/32 -j DROP" % self.vEOS_ip,\
                                         shell=True, stdout=PIPE)
         # wait for at least one sync interval
         sleep(15)
@@ -669,7 +705,7 @@ class L2Test(unittest.TestCase):
         for i in os_lines:
             #if net id and hostname are found in the same string
             if str(i).find(network['id']) != -1 and \
-               str(i).find(str(server['OS-EXT-SRV-ATTR:hypervisor_hostname'])) != -1:
+               str(i).find(str(server[self.hostname])) != -1:
                 vlan_created = True
                 break
         self.assertTrue(vlan_created)
@@ -678,7 +714,7 @@ class L2Test(unittest.TestCase):
         self.servers_client.wait_for_server_termination(body['id'])
         #Delete unused network
         # Shut down vEOS - disconnect
-        Popen("iptables -I OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
+        Popen("sudo iptables -I OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
                                         shell=True, stdout=PIPE)
         #try to delete network
         try:
@@ -686,7 +722,7 @@ class L2Test(unittest.TestCase):
         except:
             pass
         else:
-            Popen("iptables -D OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
+            Popen("sudo iptables -D OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
                                         shell=True, stdout=PIPE)
             # wait for at least one sync interval
             sleep(15)
@@ -713,9 +749,9 @@ class L2Test(unittest.TestCase):
 
     @attr(type='positive')
     def test_015_create_server_vEOS_down_VLAN_exists(self):
-        """016 - Create server when vEOS is down and required VLAN exists"""
+        """015 - Create server when vEOS is down and required VLAN exists"""
         # Shut down vEOS - disconnect
-        Popen("iptables -I OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
+        Popen("sudo iptables -I OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
                                         shell=True, stdout=PIPE)
         #
         #try to create server
@@ -727,14 +763,14 @@ class L2Test(unittest.TestCase):
 
     @attr(type='negative')
     def test_016_create_server_vEOS_down_no_VLAN(self):
-        """015 - Negative: can not create server when vEOS is down"""
+        """016 - Negative: can not create server when vEOS is down"""
         name = rand_name('015-tempest-network-')
         resp, body = self.network_client.create_network(name)
         self.assertEqual('201', resp['status'])
         network = body['network']
         self.assertTrue(network['id'] is not None)
         # Shut down vEOS - disconnect
-        Popen("iptables -I OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
+        Popen("sudo iptables -I OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
                                         shell=True, stdout=PIPE)
         #
         #try to create server
@@ -773,11 +809,9 @@ class L2Test(unittest.TestCase):
         #get hostname of Compute hostquantum net-list
         resp, server = self.servers_client.get_server(body['id'])
         self.assertEqual('200', resp['status'])
-        host_name = server['OS-EXT-SRV-ATTR:hypervisor_hostname']
+        host_name = server[self.hostname]
         net_info = server['addresses'].keys()
         self.assertEqual(str(network['name']), str(net_info[0]))
-        #reload vEOS
-        #maybe Quantum reload required
         self.server.runCmds(cmds=['configure', \
                                  'management openstack', \
                                  'no tenant-network %s' % network['id'], \
@@ -799,24 +833,25 @@ class L2Test(unittest.TestCase):
                 vlan_info = str(i)
                 break
         self.assertTrue(vlan_created, "VLAN should be created in vEOS")
-        #check if VLAN is up
-        vlans = self._show_vlan_in_vEOS(self.vEOS_ip,
+        if not(self.vEOS_is_apart):
+            #check if VLAN is up
+            vlans = self._show_vlan_in_vEOS(self.vEOS_ip,
                                         self.vEOS_login,
                                         self.vEOS_pswd)
-        vlan_lines = str(vlans).splitlines()
-        vlan_up = False
-        vlan_info_list = vlan_info.split(' ')
-        vlan_list = list()
-        for i in vlan_info_list:
-            if str(i) != '':
-                vlan_list.append(i)
-        vlan_id = vlan_list[2]
-        for v in vlan_lines:
-            if str(v).find(vlan_id) != -1 and \
-               str(v).find("active") != -1:
-                vlan_up = True
-                break
-        self.assertTrue(vlan_up, "VLAN should be active in vEOS")
+            vlan_lines = str(vlans).splitlines()
+            vlan_up = False
+            vlan_info_list = vlan_info.split(' ')
+            vlan_list = list()
+            for i in vlan_info_list:
+                if str(i) != '':
+                    vlan_list.append(i)
+            vlan_id = vlan_list[2]
+            for v in vlan_lines:
+                if str(v).find(vlan_id) != -1 and \
+                    str(v).find("active") != -1:
+                    vlan_up = True
+                    break
+            self.assertTrue(vlan_up, "VLAN should be active in vEOS")
 
     @attr(type='positive')
     def test_018_create_server_with_net_via_port(self):
@@ -840,7 +875,7 @@ class L2Test(unittest.TestCase):
         self.servers_client.wait_for_server_status(body['id'], 'ACTIVE')
         #get hostname of Compute host
         resp, server = self.servers_client.get_server(body['id'])
-        host_name = server['OS-EXT-SRV-ATTR:hypervisor_hostname']
+        host_name = server[self.hostname]
         # get list of networks attached
         serv_nets_names = server['addresses'].keys()
         net_ids = []
@@ -910,27 +945,68 @@ class L2Test(unittest.TestCase):
         ssh.close()
         return os_topology
 
-    def _check_l2_connectivity(self, ip, username, password, to_ip):
+    def _check_l2_connectivity(self, ip, username, password, to_ip,
+                                     use_namespaces, namespace):
+        if use_namespaces:
+            custom = CustomLab(ip, to_ip)
+            found = custom.check_l2_connectivity(username, password, namespace)
+        else:
+            local = LocalLab(ip, to_ip)
+            found = local.check_l2_connectivity(username, password)
+        return found
+
+
+class BaseLab(unittest.TestCase):
+    def __init__(self, ip_src, ip_dst):
+        self.ip = ip_src
+        self.to_ip = ip_dst
+
+
+class LocalLab(BaseLab):
+    def check_l2_connectivity(self, username, password):
         """Utility that returns the state of l2connectivity"""
+        found = 0
         ssh = SSHClient()
         ssh.set_missing_host_key_policy(AutoAddPolicy())
-        ping = Popen(["ping", "-c", "200", ip],\
+        ping = Popen(["ping", "-c", "300", self.ip], \
                                      shell=False, stdout=PIPE)
         ping.wait()
         if ping.returncode != 0:
-            self.fail('Failed to ping host.')
+            self.fail('Failed to ping host')
         else:
-            ssh.connect(ip, username=username, password=password)
-        no_connection = "Received 0 reply (0 request(s), 0 broadcast(s))"
-        # check network settings
-        command = "sudo arping -c 20 " + to_ip
-        # + " | grep Received"
-        output = ssh.exec_command(command)
-        # Read the output
-        bufferdata = output[1].read()
-        if str(bufferdata).find(no_connection) != -1:
-            found = -1
-        else:
-            found = 1
+            ssh.connect(self.ip, username=username, password=password)
+            no_connection = "Received 0 reply (0 request(s), 0 broadcast(s))"
+            # check network settings
+            command = "sudo arping -c 20 " + self.to_ip
+            # + " | grep Received"
+            output = ssh.exec_command(command)
+            # Read the output
+            bufferdata = output[1].read()
+            if str(bufferdata).find(no_connection) != -1:
+                found = -1
+            else:
+                found = 1
         ssh.close()
+        return found
+
+
+class CustomLab(BaseLab):
+
+    def check_l2_connectivity_fabric(self, username, password, namespace):
+        """Utility that returns the state of l2connectivity"""
+        found = 0
+        #prepare fabric
+        #with fabric.context_managers.prefix('source ' + self.env_path):
+        result = fabric.api.run('ip netns exec %s ping -c 300 %s' \
+                                     % namespace % self.ip)
+        if str(result).find("0% packet loss"):
+            output = fabric.api.run('ip netns exec %s ssh -f %s@%s -P %s; sudo arping -c 20 %s' \
+                    % namespace % username % self.ip % password % self.to_ip)
+            no_connection = "Received 0 reply (0 request(s), 0 broadcast(s))"
+            if str(output).find(no_connection) != -1:
+                found = -1
+            else:
+                found = 1
+        else:
+            self.fail('Failed to ping host.')
         return found

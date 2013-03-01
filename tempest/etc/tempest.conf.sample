@@ -33,6 +33,10 @@ strategy = keystone
 # are known.
 allow_tenant_isolation = true
 
+# Indicates whether 'host' or 'hypevisor_hostname'
+# will be used for searching  VLANs on vEOS 
+use_host_name = False
+
 # Allows test cases to create/destroy tenants and users. This option
 # enables isolated test cases and better parallel execution,
 # but also requires that OpenStack Identity API admin credentials
@@ -179,11 +183,32 @@ catalog_type = network
 tenant1_net1_id = {$NETWORK_ID}
 tenant1_net2_id = {$NETWORK_ID}
 tenant2_net1_id = {$NETWORK_ID}
+# Network 1 id from tenant 1 to check connectivity
+tenant1_net1_id = {$NETWORK_ID}
 
-vEOS_ip = {$vEOS_IP}
-vEOS_login = {$vEOS_LOGIN}
-vEOS_pswd = {$vEOS_PASSWORD}
-vEOS_if = {$vEOS_INTERFACE}
+# Namespace for Network 1 id from tenant 1
+namespace1_1 = {$NAMESPACE_ID}
+
+# Network 2 id from tenant 1 to check connectivity
+tenant1_net2_id = {$NETWORK_ID}
+
+# Namespace for Network 2 id from tenant 1
+namespace1_1 = {$NAMESPACE_ID}
+
+# Network 1 id from tenant 2 to check connectivity
+tenant2_net1_id = {$NETWORK_ID}
+
+# Namespace for Network 1 id from tenant 2
+namespace2_1 = {$NAMESPACE_ID}
+
+#Configuration file for Quantum quantum.conf
+arista_driver_ini = /etc/quantum/hardware_driver/arista_driver.ini
+
+#Configuration file for Quantum dhcp-agent
+dhcp_agent_ini =  /etc/quantum/dhcp_agent.ini 
+
+#If vEOS is separate from TOR - do not check whether VLANs are active
+vEOS_is_apart = False
 
 [identity-admin]
 # This section contains configuration options for an administrative
