@@ -1014,9 +1014,11 @@ class CustomLab(BaseLab):
         if str(ping).find(ping_fail) != -1:
             self.fail("Failed to ping host")
         else:
+#            key = fabric.api.run('sudo ip netns exec %s sudo \
+#            ssh-copy-id -i ~/.ssh/id_rsa.pub %s@%s' % (username, self.ip))
             fabric.api.run('expect  %s %s %s' % (fname, self.ip, namespace))
-            output = fabric.api.run('sudo ip netns exec %s sudo arping -c 20 %s' \
-                    % (to_namespace, self.to_ip))
+            output = fabric.api.run('sudo arping -c 20 %s' \
+                    % (self.to_ip))
             no_connection = "Received 0 reply (0 request(s), 0 broadcast(s))"
             if str(output).find(no_connection) != -1:
                 found = -1
