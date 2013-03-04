@@ -9,6 +9,7 @@ import os
 import ConfigParser
 import fabric.api
 import fabric.context_managers
+import pexpect
 
 from paramiko import SSHClient
 from paramiko import AutoAddPolicy
@@ -1003,17 +1004,22 @@ class CustomLab(BaseLab):
                                 namespace, to_namespace):
         """Utility that returns the state of l2connectivity"""
         found = 0
-        file = "/opt/stack/arista-ovs-testing/tempest/tempest/tests/network/passless_ssh.exp"
+        fname = "/opt/stack/arista-ovs-testing/tempest/tempest/tests/network/passless_ssh.exp"
         #prepare fabric
         fabric.api.env["host_string"] = "os-admin@172.27.6.253:22"
         fabric.api.env["password"] = "a12345"
-        fabric.api.run('expect  tempest/tests/network/passless_ssh.exp %s %s' \
-                           % (self.ip, namespace))
-        output = fabric.api.run('ip netns exec %s sudo arping -c 20 %s' \
-                    % (to_namespace, self.to_ip))
-        no_connection = "Received 0 reply (0 request(s), 0 broadcast(s))"
-        if str(output).find(no_connection) != -1:
-            found = -1
+        ping = fabric.api.run('ip netns exec %s sudo ping -c 200 %s' \
+                              % (namespace, self.ip))
+        ping_fail = "100% packet loss"
+        if str(ping).find(ping_fail) != -1:
+            self.fail("Failed to ping host")
         else:
-            found = 1
+            fabric.api.run('expect  %s %s %s' % (fname, self.ip, namespace))
+            output = fabric.api.run('ip netns exec %s sudo arping -c 20 %s' \
+                    % (to_namespace, self.to_ip))
+            no_connection = "Received 0 reply (0 request(s), 0 broadcast(s))"
+            if str(output).find(no_connection) != -1:
+                found = -1
+            else:
+                found = 1
         return found
