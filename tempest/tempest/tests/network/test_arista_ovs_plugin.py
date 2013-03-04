@@ -98,6 +98,10 @@ class L2Test(unittest.TestCase):
         for net in body['networks']:
             if str(net['name']).find("tempest") != -1:
                 resp, body = self.network_client.delete_network(net['id'])
+        resp, body = self.network_client.list_networks()
+        self.assertEqual('200', resp['status'])
+        while str(body['networks']).find("tempest") != -1:
+            pass
 
     @attr(type='positive')
     def test_001_create_network(self):
@@ -762,7 +766,7 @@ class L2Test(unittest.TestCase):
                                         shell=True, stdout=PIPE)
         #
         #try to create server
-        server_name = rand_name('016-tempest-server')
+        server_name = rand_name('015-tempest-server')
         server = self._create_test_server(server_name, self.image_ref,\
                                  self.flavor_ref, self.tenant1_net1_id, False)
         resp, serv = self.servers_client.get_server(server[0])
@@ -771,7 +775,7 @@ class L2Test(unittest.TestCase):
     @attr(type='negative')
     def test_016_create_server_vEOS_down_no_VLAN(self):
         """016 - Negative: can not create server when vEOS is down"""
-        name = rand_name('015-tempest-network-')
+        name = rand_name('016-tempest-network-')
         resp, body = self.network_client.create_network(name)
         self.assertEqual('201', resp['status'])
         network = body['network']
@@ -781,7 +785,7 @@ class L2Test(unittest.TestCase):
                                         shell=True, stdout=PIPE)
         #
         #try to create server
-        name = rand_name('015-tempest-server')
+        name = rand_name('016-tempest-server')
         try:
             resp, body = self.servers_client.create_server(name,
                                                  self.image_ref,
