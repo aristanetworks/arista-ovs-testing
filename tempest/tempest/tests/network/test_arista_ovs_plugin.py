@@ -65,11 +65,12 @@ class L2Test(unittest.TestCase):
 
         cls.url = 'https://' + cls.vEOS_login + ':' + cls.vEOS_pswd + '@' + \
                                 cls.vEOS_ip + '/command-api'
+
         cls.server = jsonrpclib.Server(cls.url)
 
         cls.vEOS_is_apart = cls.config.network.vEOS_is_apart
 
-        if cls.use_host_name == True:
+        if cls.use_host_name == "True":
             cls.hostname = 'OS-EXT-SRV-ATTR:host'
         else:
             cls.hostname = 'OS-EXT-SRV-ATTR:hypervisor_hostname'
@@ -80,7 +81,6 @@ class L2Test(unittest.TestCase):
             Popen("sudo iptables -D OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
                                     shell=True, stdout=fnull, stderr=fnull)
         resp, body = self.servers_client.list_servers_with_detail()
-        #print body['servers']
         for serv in body['servers']:
             if str(serv['name']).find("tempest") != -1:
                 resp, body = self.servers_client.delete_server(serv['id'])
@@ -728,7 +728,6 @@ class L2Test(unittest.TestCase):
         else:
             Popen("sudo iptables -D OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
                                         shell=True, stdout=PIPE)
-            # wait for at least one sync interval
             sleep(15)
             resp, networks = self.network_client.list_networks()
             deleted = True
@@ -983,7 +982,6 @@ class LocalLab(BaseLab):
             no_connection = "Received 0 reply (0 request(s), 0 broadcast(s))"
             # check network settings
             command = "sudo arping -c 20 " + self.to_ip
-            # + " | grep Received"
             output = ssh.exec_command(command)
             # Read the output
             bufferdata = output[1].read()
@@ -999,9 +997,9 @@ class CustomLab(BaseLab):
 
     def check_l2_connectivity(self, username, pswd, namespace):
         """Utility that returns the state of l2connectivity"""
-        found = 1
+        found = 0
         cmd = "sudo ip netns exec " + namespace + " sudo ping -c 200 " + self.ip
-        ping = Popen(cmd, shell=False, stdout=PIPE)
+        ping = Popen(cmd, shell=True, stdout=PIPE)
         ping.wait()
         if ping.returncode != 0:
             self.fail('Failed to ping host')
@@ -1009,57 +1007,53 @@ class CustomLab(BaseLab):
             ssh_newkey = "Are you sure you want to continue connecting"
             ssh_failkey = "Host key verification failed"
             ssh_pass = "password:"
+            no_l2 = "Received 0 "
+            is_l2 = "Received 20 reply"
             ssh = pexpect.spawn('sudo ip netns exec %s sudo ssh %s@%s' \
                               % (namespace, username, self.ip))
             exp = ssh.expect([ssh_newkey, ssh_failkey, ssh_pass, pexpect.EOF, '[$]'])
             if exp == 3:
-                print "I either got key or connection timeout"
                 self.fail("Failed to ssh")
-            elif exp == 0:
-                print "New key is required --- 1"
-                ssh.sendline('yes')
-                ssh.expect(ssh_pass, timeout=120)
-                if exp == 2:
-                    print "I give password"
-                    ssh.sendline(pswd)
-                    ssh.expect('[$]')
-                    if exp == 4:
-                        ssh.sendline("sudo arping -c 20 %s" % self.to_ip)
-                        ssh.expect(pexpect.EOF)
-                        print ssh.before
-                        pass
             elif exp == 1:
-                print "Verification failed"
-                ssh = ssh.sendline('sudo ssh-keygen -f "/root/.ssh/known_hosts" -R %s' % self.ip)
-                ssh.expect('$')
-                if exp == 4:
-                    ssh.sendline('sudo ip netns exec %s sudo ssh %s@%s' \
+                ssh = pexpect.spawn('sudo ssh-keygen -f "/root/.ssh/known_hosts" -R %s' % self.ip)
+                exp = ssh.expect('$')
+                s = pexpect.spawn('sudo ip netns exec %s sudo ssh %s@%s' \
                               % (namespace, username, self.ip))
-                    ssh.expect(ssh_newkey)
-                    if exp == 0:
-                        print "New key is required --- 2"
-                        ssh.sendline('yes')
-                        ssh.expect(ssh_pass, timeout=120)
-                        if exp == 2:
-                            print "I give password"
-                            ssh.sendline(pswd)
-                            ssh.expect('[$]')
-                            if exp == 4:
-                                ssh.sendline("sudo arping -c 20 %s" % self.to_ip)
-                                ssh.expect(pexpect.EOF)
-                                print ssh.before
-                                pass
-            elif exp == 2:
-                print "I give password"
-                ssh.sendline(pswd)
-                ssh.expect('[$]')
-                if exp == 4:
-                    ssh.sendline("sudo arping -c 20 %s" % self.to_ip)
-                    ssh.expect(pexpect.EOF)
-                    print ssh.before
+                exp = s.expect([ssh_newkey, ssh_pass, '[$]', pexpect.EOF])
+                if exp == 0:
+                    s.sendline('yes')
+                    exp = s.expect(ssh_pass, timeout=10)
+                    s.sendline(pswd)
+                    exp = s.expect('[$]')
+                    s.sendline("sudo arping -c 20 %s" % self.to_ip)
+                    expec = s.expect([no_l2, is_l2])
+                    if expec == 0:
+                        found = -1
+                    elif expec == 1:
+                        found = 1
+                    s.close()
+                elif exp == 3:
                     pass
-            elif exp == 3:
-                found = 0
+            elif exp == 2:
+                ssh.sendline(pswd)
+                exp = ssh.expect('[$]')
+                ssh.sendline("sudo arping -c 20 %s" % self.to_ip)
+                expec2 = ssh.expect([no_l2, is_l2])
+                if expec2 == 0:
+                    found = -1
+                elif expec2 == 1:
+                    found = 1
+                ssh.close()
+            elif exp == 0:
+                ssh.sendline('yes')
+                exp = ssh.expect(ssh_pass, timeout=10)
+                ssh.sendline(pswd)
+                exp = ssh.expect('[$]')
+                ssh.sendline("sudo arping -c 20 %s" % self.to_ip)
+                expec = ssh.expect([no_l2, is_l2])
+                if expec == 0:
+                    found = -1
+                elif expec == 1:
+                    found = 1
+                ssh.close()
         return found
-
-

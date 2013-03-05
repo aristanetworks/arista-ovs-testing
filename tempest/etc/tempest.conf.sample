@@ -193,7 +193,7 @@ namespace1_1 = {$NAMESPACE_ID}
 tenant1_net2_id = {$NETWORK_ID}
 
 # Namespace for Network 2 id from tenant 1
-namespace1_1 = {$NAMESPACE_ID}
+namespace1_2 = {$NAMESPACE_ID}
 
 # Network 1 id from tenant 2 to check connectivity
 tenant2_net1_id = {$NETWORK_ID}
