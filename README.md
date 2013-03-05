@@ -9,6 +9,7 @@ To run all tests for Arista OVS plugin:
 2. cd arista-ovs-testing/tempest
 2. set up tempest.conf file (modify arista-ovs-testing/tempest/etc/tempest.conf.sample and save as tempest.conf)
         Parameters to be set:
+
         [identity]
         host = Controller node IP
 
