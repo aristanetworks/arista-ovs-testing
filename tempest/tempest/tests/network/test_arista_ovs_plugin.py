@@ -85,7 +85,6 @@ class L2Test(unittest.TestCase):
             if str(serv['name']).find("tempest") != -1:
                 resp, body = self.servers_client.delete_server(serv['id'])
                 if resp['status'] == '204':
-                    self.servers_client.delete_server(serv['id'])
                     self.servers_client.wait_for_server_termination(serv['id'],
                                                             ignore_error=True)
         resp, body = self.network_client.list_ports()
@@ -295,8 +294,7 @@ class L2Test(unittest.TestCase):
                                            self.vm_pswd,
                                            self.server1_t2n1_ip,
                                            self.use_namespaces,
-                                           self.namespace1_1,
-                                           self.namespace2_1)
+                                           self.namespace1_1)
         self.assertEqual(-1, serv_t2n1_available, \
                          "Server from tenant 2 should not be available via L2")
         serv_t1n1_available = self._check_l2_connectivity(self.server1_t2n1_ip,
@@ -304,8 +302,7 @@ class L2Test(unittest.TestCase):
                                            self.vm_pswd,
                                            self.server1_t1n1_ip,
                                            self.use_namespaces,
-                                           self.namespace2_1,
-                                           self.namespace1_1)
+                                           self.namespace2_1)
         self.assertEqual(-1, serv_t1n1_available, \
                          "Server from tenant 1 should not be available via L2")
         self.servers_client.delete_server(self.server1_t2n1_id)
@@ -335,8 +332,7 @@ class L2Test(unittest.TestCase):
                                            self.vm_pswd,
                                            self.server1_t1n2_ip,
                                            self.use_namespaces,
-                                           self.namespace1_1,
-                                           self.namespace1_2)
+                                           self.namespace1_1)
         self.assertEqual(-1, serv_t1n2_available, \
             "Server from tenant1  network2 should not be available via L2")
         serv_t1n1_available = self._check_l2_connectivity(self.server1_t1n2_ip,
@@ -344,8 +340,7 @@ class L2Test(unittest.TestCase):
                                            self.vm_pswd,
                                            self.server1_t1n1_ip,
                                            self.use_namespaces,
-                                           self.namespace1_2,
-                                           self.namespace1_1)
+                                           self.namespace1_2)
         self.assertEqual(-1, serv_t1n1_available, \
             "Server from tenant1  network1 should not be  available via L2")
 
@@ -373,7 +368,6 @@ class L2Test(unittest.TestCase):
                                         self.vm_pswd,
                                         self.server2_t1n1_ip,
                                         self.use_namespaces,
-                                        self.namespace1_1,
                                         self.namespace1_1)
         self.assertNotEqual(-1, serv2_t1n1_available, \
                 "Server2 from the same network should be available via L2")
@@ -383,7 +377,6 @@ class L2Test(unittest.TestCase):
                                         self.vm_pswd,
                                         self.server1_t1n1_ip,
                                         self.use_namespaces,
-                                        self.namespace1_1,
                                         self.namespace1_1)
         self.assertNotEqual(-1, serv1_t1n1_available, \
                 "Server1 from the same network should be available via L2")
@@ -957,11 +950,11 @@ class L2Test(unittest.TestCase):
         return os_topology
 
     def _check_l2_connectivity(self, ip, username, password, to_ip,
-                                     use_namespaces, namespace, to_namespace):
+                                     use_namespaces, namespace):
         if use_namespaces:
             custom = CustomLab(ip, to_ip)
             found = custom.check_l2_connectivity(username, password,\
-                                                 namespace, to_namespace)
+                                                 namespace)
         else:
             local = LocalLab(ip, to_ip)
             found = local.check_l2_connectivity(username, password)
@@ -1004,28 +997,69 @@ class LocalLab(BaseLab):
 
 class CustomLab(BaseLab):
 
-    def check_l2_connectivity(self, username, password, \
-                                namespace, to_namespace):
+    def check_l2_connectivity(self, username, pswd, namespace):
         """Utility that returns the state of l2connectivity"""
-        found = 0
-        fname = "/opt/stack/arista-ovs-testing/tempest/tempest/tests/network/passless_ssh.exp"
-        #prepare fabric
-        fabric.api.env["host_string"] = "os-admin@172.27.6.253:22"
-        fabric.api.env["password"] = "a12345"
-        ping = fabric.api.run('sudo ip netns exec %s sudo ping -c 200 %s' \
-                              % (namespace, self.ip))
-        ping_fail = "100% packet loss"
-        if str(ping).find(ping_fail) != -1:
-            self.fail("Failed to ping host")
+        found = 1
+        cmd = "sudo ip netns exec " + namespace + " sudo ping -c 200 " + self.ip
+        ping = Popen(cmd, shell=False, stdout=PIPE)
+        ping.wait()
+        if ping.returncode != 0:
+            self.fail('Failed to ping host')
         else:
-            try:
-                output = fabric.api.run('sudo arping -c 20 %s' \
-                    % (self.to_ip))
-            except:
-                no_connection = "Received 0 reply (0 request(s), 0 broadcast(s))"
-                if str(output).find(no_connection) != -1:
-                    found = -1
-                else:
-                    found = 1
+            ssh_newkey = "Are you sure you want to continue connecting"
+            ssh_failkey = "Host key verification failed"
+            ssh_pass = "password:"
+            ssh = pexpect.spawn('sudo ip netns exec %s sudo ssh %s@%s' \
+                              % (namespace, username, self.ip))
+            exp = ssh.expect([ssh_newkey, ssh_failkey, ssh_pass, pexpect.EOF, '[$]'])
+            if exp == 3:
+                print "I either got key or connection timeout"
+                self.fail("Failed to ssh")
+            elif exp == 0:
+                print "New key is required --- 1"
+                ssh.sendline('yes')
+                ssh.expect(ssh_pass, timeout=120)
+                if exp == 2:
+                    print "I give password"
+                    ssh.sendline(pswd)
+                    ssh.expect('[$]')
+                    if exp == 4:
+                        ssh.sendline("sudo arping -c 20 %s" % self.to_ip)
+                        ssh.expect(pexpect.EOF)
+                        print ssh.before
+                        pass
+            elif exp == 1:
+                print "Verification failed"
+                ssh = ssh.sendline('sudo ssh-keygen -f "/root/.ssh/known_hosts" -R %s' % self.ip)
+                ssh.expect('$')
+                if exp == 4:
+                    ssh.sendline('sudo ip netns exec %s sudo ssh %s@%s' \
+                              % (namespace, username, self.ip))
+                    ssh.expect(ssh_newkey)
+                    if exp == 0:
+                        print "New key is required --- 2"
+                        ssh.sendline('yes')
+                        ssh.expect(ssh_pass, timeout=120)
+                        if exp == 2:
+                            print "I give password"
+                            ssh.sendline(pswd)
+                            ssh.expect('[$]')
+                            if exp == 4:
+                                ssh.sendline("sudo arping -c 20 %s" % self.to_ip)
+                                ssh.expect(pexpect.EOF)
+                                print ssh.before
+                                pass
+            elif exp == 2:
+                print "I give password"
+                ssh.sendline(pswd)
+                ssh.expect('[$]')
+                if exp == 4:
+                    ssh.sendline("sudo arping -c 20 %s" % self.to_ip)
+                    ssh.expect(pexpect.EOF)
+                    print ssh.before
+                    pass
+            elif exp == 3:
+                found = 0
         return found
+
 
