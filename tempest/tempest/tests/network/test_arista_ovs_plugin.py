@@ -764,16 +764,13 @@ class L2Test(unittest.TestCase):
     def test_015_create_server_vEOS_down_VLAN_exists(self):
         """015 - Create server when vEOS is down and required VLAN exists"""
         # Shut down vEOS - disconnect
-        name = rand_name('015-tempest-network')
-        resp, body = self.network_client.create_network(name)
-        network = body['network']
-        self.assertEqual('201', resp['status'])
+        net_id = self._create_network_with_subnet(self.cidr_admin_net1, False)
         #create server
         server_name = rand_name('015-tempest-server-with-net')
         resp, body = self.servers_client.create_server(server_name,
                                                  self.image_ref,
                                                  self.flavor_ref,
-                                                 networks=network['id'])
+                                                 networks=net_id)
         self.assertEqual('202', resp['status'])
         self.servers_client.wait_for_server_status(body['id'], 'ACTIVE')
         Popen("sudo iptables -I OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
@@ -782,7 +779,7 @@ class L2Test(unittest.TestCase):
         #try to create server
         server_name = rand_name('015-tempest-server')
         server = self._create_test_server(server_name, self.image_ref,\
-                                 self.flavor_ref, network['id'], False)
+                                 self.flavor_ref, net_id, False)
         resp, serv = self.servers_client.get_server(server[0])
         self.assertEqual('200', resp['status'])
 
