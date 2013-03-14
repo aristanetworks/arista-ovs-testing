@@ -365,36 +365,26 @@ class NetworkConfig(BaseConfig):
         return self.get("api_version", "v1.1")
 
     @property
-    def tenant1_net1_id(self):
-        """Network 1 in tenant 1 id"""
-        return self.get("tenant1_net1_id", "1")
+    def cidr_admin_net1(self):
+        """cidr_admin_net1"""
+        return self.get("cidr_admin_net1", "1")
 
     @property
-    def tenant1_net2_id(self):
-        """Network 2 in tenant 1 id"""
-        return self.get("tenant1_net2_id", "2")
+    def cidr_admin_net2(self):
+        """cidr_admin_net2"""
+        return self.get("cidr_admin_net2", "2")
 
     @property
-    def tenant2_net1_id(self):
-        """Network 1 in tenant 2 id"""
-        return self.get("tenant2_net1_id", "3")
+    def cidr_nonadmin_net(self):
+        """cidr_nonadmin_net"""
+        return self.get("cidr_nonadmin_net", "3")
 
     @property
-    def namespace1_1(self):
-        """Namespace for Network 1 in tenant 1 id"""
-        return self.get("namespace1_1", "name")
+    def restart_quantum(self):
+        """Path to restart script"""
+        return self.get("restart_quantum", "/etc/")
 
-    @property
-    def namespace1_2(self):
-        """Namespace for Network 1 in tenant 1 id"""
-        return self.get("namespace1_2", "name")
-
-    @property
-    def namespace2_1(self):
-        """Namespace for Network 1 in tenant 1 id"""
-        return self.get("namespace2_1", "name")
-
-    @property
+    @property"name")
     def dhcp_agent_ini(self):
         """Configuration file for Quantum dhcp-agent"""
         return self.get("dhcp_agent_ini", "/etc/quantum/dhcp_agent.ini")

@@ -313,7 +313,7 @@ class L2Test(unittest.TestCase):
     def test_006_l2_connectivity_diff_nets(self):
         """006 - Negative: Servers from different networks within the same
            tenant should not have L2 connectivity"""
-         net1_1 = self._create_network_with_subnet(self.cidr_admin_net1, False)
+        net1_1 = self._create_network_with_subnet(self.cidr_admin_net1, False)
         self.server1_t1n1_name = rand_name('006-tempest-tenant1-net1-server1-')
         self.server1_t1n1_id, self.server1_t1n1_ip = self._create_test_server(
                                                     self.server1_t1n1_name,
