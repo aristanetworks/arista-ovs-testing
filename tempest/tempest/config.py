@@ -367,17 +367,17 @@ class NetworkConfig(BaseConfig):
     @property
     def cidr_admin_net1(self):
         """cidr_admin_net1"""
-        return self.get("cidr_admin_net1", "1")
+        return self.get("cidr_admin_net1", "10.0.0.0/24")
 
     @property
     def cidr_admin_net2(self):
         """cidr_admin_net2"""
-        return self.get("cidr_admin_net2", "2")
+        return self.get("cidr_admin_net2", "10.0.1.0/24")
 
     @property
     def cidr_nonadmin_net(self):
         """cidr_nonadmin_net"""
-        return self.get("cidr_nonadmin_net", "3")
+        return self.get("cidr_nonadmin_net", "10.0.2.0/24")
 
     @property
     def restart_quantum(self):
