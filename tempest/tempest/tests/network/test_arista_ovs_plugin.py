@@ -7,8 +7,6 @@ from time import sleep
 import jsonrpclib
 import os
 import ConfigParser
-import fabric.api
-import fabric.context_managers
 import pexpect
 
 from paramiko import SSHClient
@@ -46,7 +44,7 @@ class L2Test(unittest.TestCase):
         cls.cidr_admin_net2 = cls.config.network.cidr_admin_net2
         cls.cidr_nonadmin_net = cls.config.network.cidr_nonadmin_net
         cls.restart_quantum = cls.config.network.restart_quantum
-        
+
         #get "use_namespaces" parameter
         cls.dhcp_agent_ini = cls.config.network.dhcp_agent_ini
         cls.configure = ConfigParser.ConfigParser()
@@ -453,20 +451,19 @@ class L2Test(unittest.TestCase):
 
     @attr(type='negative')
     def test_009_delete_net_in_use(self):
-        """009 - Negative: Deletion of network that is used should be prohibited"""
-        name = rand_name('009-tempest-network')
-        resp, body = self.network_client.create_network(name)
-        network = body['network']
-        self.assertEqual('201', resp['status'])
+        """
+        009 - Negative: Deletion of network that is used should be prohibited
+        """
+        net_id = self._create_network_with_subnet(self.cidr_admin_net1, False)
         self.server1_t1n1_name = rand_name('009-tempest-tenant1-net1-server1-')
         self.server1_t1n1_id, self.server1_t1n1_ip = self._create_test_server(
                                                     self.server1_t1n1_name,
                                                     self.image_ref,
                                                     self.flavor_ref,
-                                                    network['id'],
+                                                    net_id,
                                                     False)
         try:
-            self.network_client.delete_network(self.tenant1_net1_id)
+            self.network_client.delete_network(net_id)
         except exceptions.Duplicate:
             pass
         else:
@@ -479,7 +476,7 @@ class L2Test(unittest.TestCase):
         vlan_present = False
         os_lines = str(net_configuration).splitlines()
         for i in range(len(os_lines)):
-            if str(os_lines[i]).find(network['id']) != -1:
+            if str(os_lines[i]).find(net_id) != -1:
                 vlan_present = True
                 break
         self.assertTrue(vlan_present, "VLAN should not be deleted from vEOS")
@@ -489,7 +486,7 @@ class L2Test(unittest.TestCase):
         self.assertEqual('200', resp['status'])
         net_present = False
         for net in body['networks']:
-            if str(net['id']).find(network['id']) != -1:
+            if str(net['id']).find(net_id) != -1:
                 net_present = True
                 break
         self.assertTrue(net_present)
@@ -498,16 +495,13 @@ class L2Test(unittest.TestCase):
     def test_010_reboot_Quantum(self):
         """010 - All network settings should remain after Quantum reboot"""
         # create instance to add VLAN to vEOS
-        name = rand_name('010-tempest-network')
-        resp, body = self.network_client.create_network(name)
-        network = body['network']
-        self.assertEqual('201', resp['status'])
+        net_id = self._create_network_with_subnet(self.cidr_admin_net1, False)
         self.server1_t1n2_name = rand_name('010-tempest-tenant1-net1-server1-')
         self.server1_t1n2_id, self.server1_t1n2_ip = self._create_test_server(
                                                     self.server1_t1n2_name,
                                                     self.image_ref,
                                                     self.flavor_ref,
-                                                    network['id'],
+                                                    net_id,
                                                     False)
         resp, server = self.servers_client.get_server(self.server1_t1n2_id)
         self.assertEqual('200', resp['status'])
@@ -522,7 +516,7 @@ class L2Test(unittest.TestCase):
         os_lines = str(net_configuration1).splitlines()
         for i in os_lines:
             #if net id and hostname are found in the same string
-            if str(i).find(network['id']) != -1 and \
+            if str(i).find(net_id) != -1 and \
                str(i).find(host_name) != -1:
                 vlan_created = True
                 break
@@ -788,7 +782,7 @@ class L2Test(unittest.TestCase):
         #try to create server
         server_name = rand_name('015-tempest-server')
         server = self._create_test_server(server_name, self.image_ref,\
-                                 self.flavor_ref, etwork['id'], False)
+                                 self.flavor_ref, network['id'], False)
         resp, serv = self.servers_client.get_server(server[0])
         self.assertEqual('200', resp['status'])
 
