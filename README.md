@@ -14,13 +14,10 @@ To run all tests for Arista OVS plugin:
         host = Controller node IP
 
         [compute]
-        use_host_name = set True if use 'host' (was suitable for Arista lab)
-        username = set to admin
-        password = admin's password
-        tenant_name = admin's tenant (admin)
-        alt_username = set to demo (or other user from another tenant)
-        alt_password = demo's password
-        alt_tenant_name = demo's tenant
+        use_host_name = set True if use OS-EXT-SRV-ATTR:host for searching VLAN in openstack topology on vEOS
+        username = non-admin
+        password = non-admin's pass
+        tenant_name = non-admin's tenant
         image_ref = image id to be used for VM  boot
         image_ref_alt = alternative image id (can be  the same if only one is provided)
         flavor_ref = flavor id to be used for VM boot
@@ -29,11 +26,11 @@ To run all tests for Arista OVS plugin:
         ssh_pswd = password to ssh into  VM
 
         [image]
-        host = usually Controller node IP (read tempest.conf for more details)
-        port = port number for Image API
-        username = user without administrative privileges (demo)
-        password = demo's password
-        tenant_name = demo's tenant name
+        host = IP for Glance 
+        port = port for Glance
+        username = non-admin
+        password = non-admin's password
+        tenant_name = non-admin's tenant name
 
         [compute-admin]
         username = admin
@@ -41,13 +38,11 @@ To run all tests for Arista OVS plugin:
         tenant_name = admin's tenant name
 
         [network]
-        api_version = set according to environment, e.g. /v2.0 (use slash)
-        tenant1_net1_id = set to id of network, that has subnet and belongs to admin tenant (needed for  L2 connectivity check)
-        namespace1_1 = corresponding namespace
-        tenant2_net1_id = set to id of the second network, that has subnet and belongs to admin tenant (needed for  L2 connectivity check)
-        namespace1_2 = corresponding namespace
-        tenant2_net1_id = set to id of network, that has subnet and belongs to non-admin tenant and user (needed for  L2 connectivity check)
-        namespace2_1 = corresponding namespace
+        api_version = set according to environment, e.g. v2.0
+        cidr_admin_net1 = 1st CIDR for subnet within admin's tenant
+        cidr_admin_net2 = 2nd CIDR for subnet within admin's tenant
+        cidr_nonadmin_net = CIDR for subnet within nonadmin's tenant
+        restart_quantum = Path to q-svc restart script
         arista_driver_ini = path to arista_driver.ini file
         dhcp_agent_ini = path to dhcp_agent.ini file
         vEOS_is_apart = set True if vEOS and TOR separated (as was for Arista lab)
