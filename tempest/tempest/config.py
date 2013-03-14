@@ -384,7 +384,7 @@ class NetworkConfig(BaseConfig):
         """Path to restart script"""
         return self.get("restart_quantum", "/etc/")
 
-    @property"name")
+    @property
     def dhcp_agent_ini(self):
         """Configuration file for Quantum dhcp-agent"""
         return self.get("dhcp_agent_ini", "/etc/quantum/dhcp_agent.ini")
