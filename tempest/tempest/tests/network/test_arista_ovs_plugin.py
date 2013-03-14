@@ -773,6 +773,9 @@ class L2Test(unittest.TestCase):
                                                  networks=net_id)
         self.assertEqual('202', resp['status'])
         self.servers_client.wait_for_server_status(body['id'], 'ACTIVE')
+        resp, serv = self.servers_client.delete_server(body['id'])
+        self.assertEqual('204', resp['status'])
+        self.servers_client.wait_for_server_termination(body['id'])
         Popen("sudo iptables -I OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
                                         shell=True, stdout=PIPE)
         #
