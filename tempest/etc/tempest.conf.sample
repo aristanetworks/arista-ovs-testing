@@ -33,7 +33,8 @@ strategy = keystone
 # are known.
 allow_tenant_isolation = true
 
-# Indicates whether 'host' or 'hypevisor_hostname'
+# Indicates whether OS-EXT-SRV-ATTR:host (if True) or
+# OS-EXT-SRV-ATTR:hypervisor_hostname (if False)
 # will be used for searching  VLANs on vEOS 
 use_host_name = False
 
@@ -180,32 +181,21 @@ api_version = v2.0
 # Catalog type of the Quantum Service
 catalog_type = network
 
-tenant1_net1_id = {$NETWORK_ID}
-tenant1_net2_id = {$NETWORK_ID}
-tenant2_net1_id = {$NETWORK_ID}
-# Network 1 id from tenant 1 to check connectivity
-tenant1_net1_id = {$NETWORK_ID}
-
-# Namespace for Network 1 id from tenant 1
-namespace1_1 = {$NAMESPACE_ID}
-
-# Network 2 id from tenant 1 to check connectivity
-tenant1_net2_id = {$NETWORK_ID}
-
-# Namespace for Network 2 id from tenant 1
-namespace1_2 = {$NAMESPACE_ID}
-
-# Network 1 id from tenant 2 to check connectivity
-tenant2_net1_id = {$NETWORK_ID}
-
-# Namespace for Network 1 id from tenant 2
-namespace2_1 = {$NAMESPACE_ID}
+# 1st CIDR for subnet within admin's tenant 
+cidr_admin_net1 = {$CIDR}
+# 2nd CIDR for subnet within admin's tenant 
+cidr_admin_net2 = {$CIDR}
+# CIDR for subnet within nonadmin's tenant 
+cidr_nonadmin_net = {$CIDR}
 
 #Configuration file for Quantum quantum.conf
 arista_driver_ini = /etc/quantum/hardware_driver/arista_driver.ini
 
 #Configuration file for Quantum dhcp-agent
 dhcp_agent_ini =  /etc/quantum/dhcp_agent.ini 
+
+#Path to q-svc restart script
+restart_quantum = /usr/sbin/quantum-restart.sh
 
 #If vEOS is separate from TOR - do not check whether VLANs are active
 vEOS_is_apart = False

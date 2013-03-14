@@ -44,6 +44,24 @@ class NetworkClient(RestClient):
     def delete_network(self, uuid):
         resp, body = self.delete('networks/%s' % uuid)
         return resp, body
+    
+    def create_subnet(self, network_id, cidr, name, key="subnet"):
+        post_body = {
+            key: {
+                  'network_id': network_id,
+                  'cidr': cidr,
+                  'name': name
+            }
+        }
+        headers = {'Content-Type': 'application/json'}
+        body = json.dumps(post_body)
+        resp, body = self.post('subnets', headers=headers, body=body)
+        body = json.loads(body)
+        return resp, body
+
+    def delete_subnet(self, uuid):
+        resp, body = self.delete('subnets/%s' % uuid)
+        return resp, body
 
     def create_port(self, name, network_id, state=None, key='port'):
         if not state:

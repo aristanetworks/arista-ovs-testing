@@ -21,13 +21,13 @@ class L2Test(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.os = openstack.Manager()
+        cls.os = openstack.AdminManager()
         #set up Network client
         cls.network_client = cls.os.network_client
         cls.config = cls.os.config
 
         #set up Alt Client
-        cls.alt_manager = openstack.AltManager()
+        cls.alt_manager = openstack.Manager()
         cls.alt_servers_client = cls.alt_manager.servers_client
         cls.alt_network_client = cls.alt_manager.network_client
         cls.alt_security_client = cls.alt_manager.security_groups_client
@@ -42,13 +42,11 @@ class L2Test(unittest.TestCase):
         cls.use_host_name = cls.config.compute.use_host_name
 
         #get test networks
-        cls.tenant1_net1_id = cls.config.network.tenant1_net1_id
-        cls.namespace1_1 = cls.config.network.namespace1_1
-        cls.tenant1_net2_id = cls.config.network.tenant1_net2_id
-        cls.namespace1_2 = cls.config.network.namespace1_2
-        cls.tenant2_net1_id = cls.config.network.tenant2_net1_id
-        cls.namespace2_1 = cls.config.network.namespace2_1
-
+        cls.cidr_admin_net1 = cls.config.network.cidr_admin_net1
+        cls.cidr_admin_net2 = cls.config.network.cidr_admin_net2
+        cls.cidr_nonadmin_net = cls.config.network.cidr_nonadmin_net
+        cls.restart_quantum = cls.config.network.restart_quantum
+        
         #get "use_namespaces" parameter
         cls.dhcp_agent_ini = cls.config.network.dhcp_agent_ini
         cls.configure = ConfigParser.ConfigParser()
@@ -273,36 +271,40 @@ class L2Test(unittest.TestCase):
     def test_005_l2_connectivity_diff_tenants(self):
         """005 - Negative: Servers from different tenants
            should not have L2 connectivity"""
+        net1_1 = self._create_network_with_subnet(self.cidr_admin_net1, False)
         self.server1_t1n1_name = rand_name('005-tempest-tenant1-net1-server1-')
         self.server1_t1n1_id, self.server1_t1n1_ip = self._create_test_server(
                                                     self.server1_t1n1_name,
                                                     self.image_ref,
                                                     self.flavor_ref,
-                                                    self.tenant1_net1_id,
+                                                    net1_1,
                                                     False)
         #test server from another tenant (network) - VM4
+        net2_1 = self._create_network_with_subnet(self.cidr_nonadmin_net, True)
         self.server1_t2n1_name = rand_name('005-tempest-tenant2-net1-server1-')
         self.server1_t2n1_id, self.server1_t2n1_ip = self._create_test_server(
                                                    self.server1_t2n1_name,
                                                    self.image_ref,
                                                    self.flavor_ref,
-                                                   self.tenant2_net1_id,
+                                                   net2_1,
                                                    True)
         # check network settings
+        namespace1_1 = 'qdhcp-' + net1_1
         serv_t2n1_available = self._check_l2_connectivity(self.server1_t1n1_ip,
                                            self.vm_login,
                                            self.vm_pswd,
                                            self.server1_t2n1_ip,
                                            self.use_namespaces,
-                                           self.namespace1_1)
+                                           namespace1_1)
         self.assertEqual(-1, serv_t2n1_available, \
                          "Server from tenant 2 should not be available via L2")
+        namespace2_1 = 'qdhcp-' + net2_1
         serv_t1n1_available = self._check_l2_connectivity(self.server1_t2n1_ip,
                                            self.vm_login,
                                            self.vm_pswd,
                                            self.server1_t1n1_ip,
                                            self.use_namespaces,
-                                           self.namespace2_1)
+                                           namespace2_1)
         self.assertEqual(-1, serv_t1n1_available, \
                          "Server from tenant 1 should not be available via L2")
         self.servers_client.delete_server(self.server1_t2n1_id)
@@ -311,64 +313,70 @@ class L2Test(unittest.TestCase):
     def test_006_l2_connectivity_diff_nets(self):
         """006 - Negative: Servers from different networks within the same
            tenant should not have L2 connectivity"""
+         net1_1 = self._create_network_with_subnet(self.cidr_admin_net1, False)
         self.server1_t1n1_name = rand_name('006-tempest-tenant1-net1-server1-')
         self.server1_t1n1_id, self.server1_t1n1_ip = self._create_test_server(
                                                     self.server1_t1n1_name,
                                                     self.image_ref,
                                                     self.flavor_ref,
-                                                    self.tenant1_net1_id,
+                                                    net1_1,
                                                     False)
         # test server in the same tenant, another network
+        net1_2 = self._create_network_with_subnet(self.cidr_admin_net2, False)
         self.server1_t1n2_name = rand_name('006-tempest-tenant1-net2-server1-')
         self.server1_t1n2_id, self.server1_t1n2_ip = self._create_test_server(
                                                     self.server1_t1n2_name,
                                                     self.image_ref,
                                                     self.flavor_ref,
-                                                    self.tenant1_net2_id,
+                                                    net1_2,
                                                     False)
         # check network settings
+        namespace1_1 = 'qdhcp-' + net1_1
         serv_t1n2_available = self._check_l2_connectivity(self.server1_t1n1_ip,
                                            self.vm_login,
                                            self.vm_pswd,
                                            self.server1_t1n2_ip,
                                            self.use_namespaces,
-                                           self.namespace1_1)
+                                           namespace1_1)
         self.assertEqual(-1, serv_t1n2_available, \
             "Server from tenant1  network2 should not be available via L2")
+        namespace1_2 = 'qdhcp-' + net1_2
         serv_t1n1_available = self._check_l2_connectivity(self.server1_t1n2_ip,
                                            self.vm_login,
                                            self.vm_pswd,
                                            self.server1_t1n1_ip,
                                            self.use_namespaces,
-                                           self.namespace1_2)
+                                           namespace1_2)
         self.assertEqual(-1, serv_t1n1_available, \
             "Server from tenant1  network1 should not be  available via L2")
 
     @attr(type='positive')
     def test_007_l2_connectivity_same_net(self):
         """007 - Servers from the same network should have L2 connectivity"""
+        net1_1 = self._create_network_with_subnet(self.cidr_admin_net1, False)
         self.server1_t1n1_name = rand_name('007-tempest-tenant1-net1-server1-')
         self.server1_t1n1_id, self.server1_t1n1_ip = self._create_test_server(
                                                     self.server1_t1n1_name,
                                                     self.image_ref,
                                                     self.flavor_ref,
-                                                    self.tenant1_net1_id,
+                                                    net1_1,
                                                     False)
         self.server2_t1n1_name = rand_name('007-tempest-tenant1-net1-server2-')
         self.server2_t1n1_id, self.server2_t1n1_ip = self._create_test_server(
                                                     self.server2_t1n1_name,
                                                     self.image_ref,
                                                     self.flavor_ref,
-                                                    self.tenant1_net1_id,
+                                                    net1_1,
                                                     False)
         # check network settings
+        namespace1_1 = 'qdhcp-' + net1_1
         serv2_t1n1_available = self._check_l2_connectivity(
                                         self.server1_t1n1_ip,
                                         self.vm_login,
                                         self.vm_pswd,
                                         self.server2_t1n1_ip,
                                         self.use_namespaces,
-                                        self.namespace1_1)
+                                        namespace1_1)
         self.assertNotEqual(-1, serv2_t1n1_available, \
                 "Server2 from the same network should be available via L2")
         serv1_t1n1_available = self._check_l2_connectivity(
@@ -377,7 +385,7 @@ class L2Test(unittest.TestCase):
                                         self.vm_pswd,
                                         self.server1_t1n1_ip,
                                         self.use_namespaces,
-                                        self.namespace1_1)
+                                        namespace1_1)
         self.assertNotEqual(-1, serv1_t1n1_available, \
                 "Server1 from the same network should be available via L2")
 
@@ -446,12 +454,16 @@ class L2Test(unittest.TestCase):
     @attr(type='negative')
     def test_009_delete_net_in_use(self):
         """009 - Negative: Deletion of network that is used should be prohibited"""
+        name = rand_name('009-tempest-network')
+        resp, body = self.network_client.create_network(name)
+        network = body['network']
+        self.assertEqual('201', resp['status'])
         self.server1_t1n1_name = rand_name('009-tempest-tenant1-net1-server1-')
         self.server1_t1n1_id, self.server1_t1n1_ip = self._create_test_server(
                                                     self.server1_t1n1_name,
                                                     self.image_ref,
                                                     self.flavor_ref,
-                                                    self.tenant1_net1_id,
+                                                    network['id'],
                                                     False)
         try:
             self.network_client.delete_network(self.tenant1_net1_id)
@@ -467,8 +479,7 @@ class L2Test(unittest.TestCase):
         vlan_present = False
         os_lines = str(net_configuration).splitlines()
         for i in range(len(os_lines)):
-            #if net id and hostname are found in the same string
-            if str(os_lines[i]).find(self.tenant1_net1_id) != -1:
+            if str(os_lines[i]).find(network['id']) != -1:
                 vlan_present = True
                 break
         self.assertTrue(vlan_present, "VLAN should not be deleted from vEOS")
@@ -478,7 +489,7 @@ class L2Test(unittest.TestCase):
         self.assertEqual('200', resp['status'])
         net_present = False
         for net in body['networks']:
-            if str(net['id']).find(self.tenant1_net1_id) != -1:
+            if str(net['id']).find(network['id']) != -1:
                 net_present = True
                 break
         self.assertTrue(net_present)
@@ -487,12 +498,16 @@ class L2Test(unittest.TestCase):
     def test_010_reboot_Quantum(self):
         """010 - All network settings should remain after Quantum reboot"""
         # create instance to add VLAN to vEOS
+        name = rand_name('010-tempest-network')
+        resp, body = self.network_client.create_network(name)
+        network = body['network']
+        self.assertEqual('201', resp['status'])
         self.server1_t1n2_name = rand_name('010-tempest-tenant1-net1-server1-')
         self.server1_t1n2_id, self.server1_t1n2_ip = self._create_test_server(
                                                     self.server1_t1n2_name,
                                                     self.image_ref,
                                                     self.flavor_ref,
-                                                    self.tenant1_net2_id,
+                                                    network['id'],
                                                     False)
         resp, server = self.servers_client.get_server(self.server1_t1n2_id)
         self.assertEqual('200', resp['status'])
@@ -507,13 +522,14 @@ class L2Test(unittest.TestCase):
         os_lines = str(net_configuration1).splitlines()
         for i in os_lines:
             #if net id and hostname are found in the same string
-            if str(i).find(self.tenant1_net2_id) != -1 and \
+            if str(i).find(network['id']) != -1 and \
                str(i).find(host_name) != -1:
                 vlan_created = True
                 break
         self.assertTrue(vlan_created, "VLAN should be created in vEOS")
         #Reboot Quantum
-        Popen('sh /usr/sbin/quantum-restart.sh', shell=True, stdout=PIPE)
+        restart = "sh " + self.restart_quantum
+        Popen(restart, shell=True, stdout=PIPE)
         sleep(5)
         #check network settings after reboot
         resp, body2 = self.network_client.list_networks()
@@ -754,13 +770,25 @@ class L2Test(unittest.TestCase):
     def test_015_create_server_vEOS_down_VLAN_exists(self):
         """015 - Create server when vEOS is down and required VLAN exists"""
         # Shut down vEOS - disconnect
+        name = rand_name('015-tempest-network')
+        resp, body = self.network_client.create_network(name)
+        network = body['network']
+        self.assertEqual('201', resp['status'])
+        #create server
+        server_name = rand_name('015-tempest-server-with-net')
+        resp, body = self.servers_client.create_server(server_name,
+                                                 self.image_ref,
+                                                 self.flavor_ref,
+                                                 networks=network['id'])
+        self.assertEqual('202', resp['status'])
+        self.servers_client.wait_for_server_status(body['id'], 'ACTIVE')
         Popen("sudo iptables -I OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
                                         shell=True, stdout=PIPE)
         #
         #try to create server
         server_name = rand_name('015-tempest-server')
         server = self._create_test_server(server_name, self.image_ref,\
-                                 self.flavor_ref, self.tenant1_net1_id, False)
+                                 self.flavor_ref, etwork['id'], False)
         resp, serv = self.servers_client.get_server(server[0])
         self.assertEqual('200', resp['status'])
 
@@ -958,6 +986,27 @@ class L2Test(unittest.TestCase):
             local = LocalLab(ip, to_ip)
             found = local.check_l2_connectivity(username, password)
         return found
+
+    def _create_network_with_subnet(self, cidr, alt_client):
+        net_name = rand_name('tempest-network-with-ip-')
+        subnet_name = rand_name('tempest-subnet-')
+        if alt_client == True:
+            resp, body = self.alt_network_client.create_network(net_name)
+            self.assertEqual('201', resp['status'])
+            network = body['network']
+            self.assertTrue(network['id'] is not None)
+            resp, body = self.alt_network_client.create_subnet(network['id'], \
+                                                        cidr, subnet_name)
+            self.assertEqual('201', resp['status'])
+        else:
+            resp, body = self.network_client.create_network(net_name)
+            self.assertEqual('201', resp['status'])
+            network = body['network']
+            self.assertTrue(network['id'] is not None)
+            resp, body = self.network_client.create_subnet(network['id'], \
+                                                        cidr, subnet_name)
+            self.assertEqual('201', resp['status'])
+        return network['id']
 
 
 class BaseLab(unittest.TestCase):
