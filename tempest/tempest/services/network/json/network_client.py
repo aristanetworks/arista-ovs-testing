@@ -45,10 +45,11 @@ class NetworkClient(RestClient):
         resp, body = self.delete('networks/%s' % uuid)
         return resp, body
     
-    def create_subnet(self, network_id, cidr, name, key="subnet"):
+    def create_subnet(self, network_id, cidr, name, key="subnet", ip_v="4"):
         post_body = {
             key: {
                   'network_id': network_id,
+                  'ip_version': ip_v,
                   'cidr': cidr,
                   'name': name
             }
