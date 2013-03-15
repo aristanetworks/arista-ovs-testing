@@ -77,22 +77,30 @@ class L2Test(unittest.TestCase):
             Popen("sudo iptables -D OUTPUT -d %s/32 -j DROP" % self.vEOS_ip, \
                                     shell=True, stdout=fnull, stderr=fnull)
         resp, body = self.servers_client.list_servers_with_detail()
+        #delete tempest servers
         for serv in body['servers']:
             if str(serv['name']).find("tempest") != -1:
                 resp, body = self.servers_client.delete_server(serv['id'])
                 if resp['status'] == '204':
                     self.servers_client.wait_for_server_termination(serv['id'],
                                                             ignore_error=True)
-        resp, body = self.network_client.list_ports()
-        self.assertEqual('200', resp['status'])
-        for port in body['ports']:
-            if str(port['name']).find("tempest") != -1:
-                resp, body = self.network_client.delete_port(port['id'])
+        #delete tempest networks
         resp, body = self.network_client.list_networks()
         self.assertEqual('200', resp['status'])
         for net in body['networks']:
             if str(net['name']).find("tempest") != -1:
+                #delete tempest ports at first
+                resp, body = self.network_client.list_ports()
+                self.assertEqual('200', resp['status'])
+                for port in body['ports']:
+                    resp, pbody = self.network_client.show_port(port['id'])
+                    self.assertEqual('200', resp['status'])
+                    iport = pbody['port']
+                    if iport['network_id'] == net['id']:
+                        r, body = self.network_client.delete_port(port['id'])
+                        self.assertEqual('204', r['status'])
                 resp, body = self.network_client.delete_network(net['id'])
+                self.assertEqual('204', resp['status'])
         resp, body = self.network_client.list_networks()
         self.assertEqual('200', resp['status'])
         while str(body['networks']).find("tempest") != -1:
