@@ -85,8 +85,12 @@ class NetworkClient(RestClient):
         return resp, body
 
     def list_ports(self):
-        #resp, body = self.get('networks/%s/ports.json' % network_id)
         resp, body = self.get('/ports.json')
+        body = json.loads(body)
+        return resp, body
+
+    def show_port(self, port_id):
+        resp, body = self.get('ports/%s.json' % port_id)
         body = json.loads(body)
         return resp, body
 
